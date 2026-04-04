@@ -216,9 +216,15 @@ __marimo__/
 *.pth
 
 # logs
-./*/logs/
-./*/logs/*
+logs/
+logs/*
+*/logs/
+*/logs/*
 *.log 
 
 # results
+outputs/
+outputs/*
+*/outputs/
+*/outputs/*
 *.csv 
