@@ -228,3 +228,7 @@ outputs/*
 */outputs/
 */outputs/*
 *.csv 
+selected_results/
+selected_results/*
+*/selected_results/
+*/selected_results/* 
