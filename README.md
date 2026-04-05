@@ -7,9 +7,10 @@ Radiomics-Pathomics Contrastive Learning.
 
 (i) Hugging Face 토큰 환경변수로 설정
 ```bash
-export HF_TOKEN="새로발급받은토큰"
+touch .env
+HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxx
+echo ".env" >> .gitignore
 ```
-or `.env` 설정. 
 
 (ii) HEST / HEST-Bench 다운로드
 ```bash
