@@ -3,6 +3,26 @@ Radiomics-Pathomics Contrastive Learning.
 
 ---
 
+## Prepare data
+
+(i) Hugging Face 토큰 환경변수로 설정
+```bash
+export HF_TOKEN="새로발급받은토큰"
+```
+
+(ii) HEST / HEST-Bench 다운로드
+```bash
+python -m src.data.download_hest --config configs/data/download_hest.yaml
+```
+
+(iii) gene list 추출
+```bash
+python -m src.data.extract_genes --config configs/data/extract_genes.yaml
+```
+
+
+---
+
 ## RaPaCL
 
 ### Run RaPaCL

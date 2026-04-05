@@ -2,7 +2,7 @@ seed: 42
 default_outer_fold: 0
 
 paths:
-  bench_data_root: /root/workspace/hest_data/eval/bench_data/IDC
+  bench_data_root: /root/workspace/datasets/hest_data/eval/bench_data/IDC
   log_dir: logs/stnet
   output_root: outputs/stnet
 
