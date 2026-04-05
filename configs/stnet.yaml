@@ -37,4 +37,4 @@ runtime:
   device: cuda
 
   # eval 모드에서 특정 checkpoint를 읽고 싶으면 지정
-  # checkpoint_path: outputs/stnet/run_20260405_120000/checkpoints/final_model.pth
+  checkpoint_path: outputs/stnet/run_20260405_172500/checkpoints/final_model.pth
