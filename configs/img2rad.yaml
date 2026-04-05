@@ -2,9 +2,9 @@ seed: 42
 
 paths:
   bench_data_root: /root/workspace/datasets/hest_data/eval/bench_data/IDC 
-  checkpoint_dir: /root/workspace/outputs/img2rad/checkpoints
+  checkpoint_dir: /root/workspace/RaPaCL/outputs/img2rad/checkpoints
   stnet_ckpt_dir: /root/workspace/archive/impl/stnet/checkpoints/run_20260327_052645 # need to modify 
-  log_dir: /root/workspace/logs/img2rad
+  log_dir: /root/workspace/RaPaCL/logs/img2rad
 
 model:
   genes_criteria: var
