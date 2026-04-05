@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dotenv import load_dotenv
 import os
 from pathlib import Path
 from typing import Sequence
@@ -107,6 +108,8 @@ def download_hest_bench_idc(
 
 
 def main() -> None:
+    load_dotenv()
+
     args = parse_common_args()
     cfg = load_yaml(args.config)
     cfg = apply_cli_overrides(cfg, args)

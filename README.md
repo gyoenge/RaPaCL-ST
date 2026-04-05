@@ -9,6 +9,7 @@ Radiomics-Pathomics Contrastive Learning.
 ```bash
 export HF_TOKEN="새로발급받은토큰"
 ```
+or `.env` 설정. 
 
 (ii) HEST / HEST-Bench 다운로드
 ```bash
