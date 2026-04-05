@@ -64,7 +64,23 @@ python -m src.baselines.stnet.run \
 
 ### Run Img2Rad
 
-...
+```bash
+cd RaPaCL/
+```
+
+(i) train
+```bash
+python -m src.baselines.img2rad.main \
+  --config configs/img2rad.yaml \
+  --mode train
+```
+
+(ii) eval 
+```bash
+python -m src.baselines.img2rad.main \
+  --config configs/img2rad.yaml \
+  --mode eval
+```
 
 ---
 
