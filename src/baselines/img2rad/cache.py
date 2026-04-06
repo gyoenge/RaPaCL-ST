@@ -100,6 +100,7 @@ def load_sample_radiomics_parquet(
         "wavelet-",
         "exponential_",
         "square_",
+        "log-sigma-",
     )
     feature_columns = [
         col for col in df.columns
