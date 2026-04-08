@@ -3,12 +3,15 @@ from __future__ import annotations
 import logging
 import os
 
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
-from torch.utils.data import Subset
 
 from .cache import load_samplewise_radiomics_targets
-from .dataset import RadiomicsTargetDataset, STNetDataset
+from .dataset import (
+    GeneWithRadiomicsDataset,
+    RadiomicsTargetDataset,
+    STNetDataset,
+)
 
 
 def build_transforms():
@@ -47,34 +50,15 @@ def _dataloader_kwargs(cfg: dict) -> dict:
     }
 
 
-def build_radiomics_dataloaders(
+def _build_base_st_datasets(
     cfg: dict,
     gene_list_path: str,
     outer_fold: int,
-    logger: logging.Logger,
 ):
     bench_data_root = cfg["paths"]["bench_data_root"]
-    batch_size = int(cfg["train"]["batch_size"])
-    normalize_expression = bool(cfg.get("data", {}).get("normalize_gene_expression", True))
-
-    radiomics_parquet_dir = cfg["data"]["radiomics_parquet_dir"]
-    radiomics_key_column = cfg.get("data", {}).get("radiomics_key_column", "barcode")
-    
-    radiomics_ignore_columns = cfg.get("data", {}).get(
-        "radiomics_ignore_columns",
-        ["sample_id", "patch_idx", "patch_id", "barcode", "status"],
+    normalize_expression = bool(
+        cfg.get("data", {}).get("normalize_gene_expression", True)
     )
-
-    radiomics_ignore_prefixes = cfg.get("data", {}).get(
-        "radiomics_ignore_prefixes",
-        [],
-    )
-    
-    apply_train_split_scaling = bool(
-        cfg.get("data", {}).get("radiomics_apply_train_split_scaling", False)
-    )
-
-    ### 
 
     train_transform, eval_transform = build_transforms()
     train_csv, test_csv = build_fold_csv_paths(bench_data_root, outer_fold)
@@ -94,7 +78,37 @@ def build_radiomics_dataloaders(
         normalize_expression=normalize_expression,
     )
 
-    train_rad_targets, feature_names, train_valid_indices = load_samplewise_radiomics_targets(
+    return train_base_dataset, test_base_dataset
+
+
+def _prepare_fold_radiomics_features(
+    cfg: dict,
+    gene_list_path: str,
+    outer_fold: int,
+    logger: logging.Logger,
+):
+    radiomics_parquet_dir = cfg["data"]["radiomics_parquet_dir"]
+    radiomics_key_column = cfg.get("data", {}).get("radiomics_key_column", "barcode")
+
+    radiomics_ignore_columns = cfg.get("data", {}).get(
+        "radiomics_ignore_columns",
+        ["sample_id", "patch_idx", "patch_id", "barcode", "status"],
+    )
+    radiomics_ignore_prefixes = cfg.get("data", {}).get(
+        "radiomics_ignore_prefixes",
+        [],
+    )
+    apply_train_split_scaling = bool(
+        cfg.get("data", {}).get("radiomics_apply_train_split_scaling", False)
+    )
+
+    train_base_dataset, test_base_dataset = _build_base_st_datasets(
+        cfg=cfg,
+        gene_list_path=gene_list_path,
+        outer_fold=outer_fold,
+    )
+
+    train_rad_features, feature_names, train_valid_indices = load_samplewise_radiomics_targets(
         base_dataset=train_base_dataset,
         radiomics_parquet_dir=radiomics_parquet_dir,
         logger=logger,
@@ -104,7 +118,7 @@ def build_radiomics_dataloaders(
         cfg=cfg,
     )
 
-    test_rad_targets, _, test_valid_indices = load_samplewise_radiomics_targets(
+    test_rad_features, _, test_valid_indices = load_samplewise_radiomics_targets(
         base_dataset=test_base_dataset,
         radiomics_parquet_dir=radiomics_parquet_dir,
         logger=logger,
@@ -114,48 +128,27 @@ def build_radiomics_dataloaders(
         cfg=cfg,
     )
 
-    ## debug
-
     logger.info(
-        "[RadiomicsStats][train] shape=%s mean=%.4f std=%.4f min=%.4f max=%.4f",
-        tuple(train_rad_targets.shape),
-        train_rad_targets.mean().item(),
-        train_rad_targets.std().item(),
-        train_rad_targets.min().item(),
-        train_rad_targets.max().item(),
+        "[RadiomicsStats][raw-train] shape=%s mean=%.4f std=%.4f min=%.4f max=%.4f",
+        tuple(train_rad_features.shape),
+        train_rad_features.mean().item(),
+        train_rad_features.std().item(),
+        train_rad_features.min().item(),
+        train_rad_features.max().item(),
     )
-
     logger.info(
-        "[RadiomicsStats][test] shape=%s mean=%.4f std=%.4f min=%.4f max=%.4f",
-        tuple(test_rad_targets.shape),
-        test_rad_targets.mean().item(),
-        train_rad_targets.std().item(),
-        test_rad_targets.min().item(),
-        test_rad_targets.max().item(),
+        "[RadiomicsStats][raw-test] shape=%s mean=%.4f std=%.4f min=%.4f max=%.4f",
+        tuple(test_rad_features.shape),
+        test_rad_features.mean().item(),
+        test_rad_features.std().item(),
+        test_rad_features.min().item(),
+        test_rad_features.max().item(),
     )
-
-    feature_mean = train_rad_targets.mean(dim=0)
-    feature_std = train_rad_targets.std(dim=0)
-
-    logger.info(
-        "[RadiomicsStats][train-featurewise] mean(abs_mean)=%.4f mean(std)=%.4f min(std)=%.4f max(std)=%.4f",
-        feature_mean.abs().mean().item(),
-        feature_std.mean().item(),
-        feature_std.min().item(),
-        feature_std.max().item(),
-    )
-
-    ########
 
     train_base_dataset = Subset(train_base_dataset, train_valid_indices)
     test_base_dataset = Subset(test_base_dataset, test_valid_indices)
 
-    ################################################################################ 
-
-    # -----------------------------
-    # 1) train 기준 상수 feature 제거
-    # -----------------------------
-    raw_train_std = train_rad_targets.std(dim=0)
+    raw_train_std = train_rad_features.std(dim=0)
     valid_feature_mask = raw_train_std > 1e-6
 
     num_total_features = int(valid_feature_mask.numel())
@@ -168,7 +161,6 @@ def build_radiomics_dataloaders(
             for i, keep in enumerate(valid_feature_mask.tolist())
             if not keep
         ]
-
         logger.info(
             "[RadiomicsStats] removed %d constant/near-constant features (kept %d / %d)",
             num_removed_features,
@@ -186,51 +178,44 @@ def build_radiomics_dataloaders(
             num_total_features,
         )
 
-    train_rad_targets = train_rad_targets[:, valid_feature_mask]
-    test_rad_targets = test_rad_targets[:, valid_feature_mask]
+    train_rad_features = train_rad_features[:, valid_feature_mask]
+    test_rad_features = test_rad_features[:, valid_feature_mask]
     feature_names = [
         feature_names[i]
         for i, keep in enumerate(valid_feature_mask.tolist())
         if keep
     ]
 
-    # -----------------------------
-    # 2) train 기준 scaling
-    # -----------------------------
     if apply_train_split_scaling:
-        train_mean = train_rad_targets.mean(dim=0, keepdim=True)
-        train_std = train_rad_targets.std(dim=0, keepdim=True).clamp_min(1e-6)
+        train_mean = train_rad_features.mean(dim=0, keepdim=True)
+        train_std = train_rad_features.std(dim=0, keepdim=True).clamp_min(1e-6)
 
-        train_rad_targets = (train_rad_targets - train_mean) / train_std
-        test_rad_targets = (test_rad_targets - train_mean) / train_std
+        train_rad_features = (train_rad_features - train_mean) / train_std
+        test_rad_features = (test_rad_features - train_mean) / train_std
 
         logger.info("[RadiomicsStats] applied train-split z-score scaling")
     else:
         logger.info("[RadiomicsStats] skipped train-split z-score scaling")
 
-    # -----------------------------
-    # 3) 최종 통계 로그
-    # -----------------------------
     logger.info(
-        "[RadiomicsStats][train] shape=%s mean=%.4f std=%.4f min=%.4f max=%.4f",
-        tuple(train_rad_targets.shape),
-        train_rad_targets.mean().item(),
-        train_rad_targets.std().item(),
-        train_rad_targets.min().item(),
-        train_rad_targets.max().item(),
+        "[RadiomicsStats][final-train] shape=%s mean=%.4f std=%.4f min=%.4f max=%.4f",
+        tuple(train_rad_features.shape),
+        train_rad_features.mean().item(),
+        train_rad_features.std().item(),
+        train_rad_features.min().item(),
+        train_rad_features.max().item(),
     )
     logger.info(
-        "[RadiomicsStats][test] shape=%s mean=%.4f std=%.4f min=%.4f max=%.4f",
-        tuple(test_rad_targets.shape),
-        test_rad_targets.mean().item(),
-        test_rad_targets.std().item(),
-        test_rad_targets.min().item(),
-        test_rad_targets.max().item(),
+        "[RadiomicsStats][final-test] shape=%s mean=%.4f std=%.4f min=%.4f max=%.4f",
+        tuple(test_rad_features.shape),
+        test_rad_features.mean().item(),
+        test_rad_features.std().item(),
+        test_rad_features.min().item(),
+        test_rad_features.max().item(),
     )
 
-    feature_mean = train_rad_targets.mean(dim=0)
-    feature_std = train_rad_targets.std(dim=0)
-
+    feature_mean = train_rad_features.mean(dim=0)
+    feature_std = train_rad_features.std(dim=0)
     logger.info(
         "[RadiomicsStats][train-featurewise] mean(abs_mean)=%.4f mean(std)=%.4f min(std)=%.4f max(std)=%.4f",
         feature_mean.abs().mean().item(),
@@ -239,15 +224,43 @@ def build_radiomics_dataloaders(
         feature_std.max().item(),
     )
 
+    radiomics_dim = int(train_rad_features.shape[1])
 
-    ################################################################################
+    return (
+        train_base_dataset,
+        test_base_dataset,
+        train_rad_features,
+        test_rad_features,
+        radiomics_dim,
+        feature_names,
+    )
 
-    radiomics_dim = int(train_rad_targets.shape[1])
+
+def build_radiomics_dataloaders(
+    cfg: dict,
+    gene_list_path: str,
+    outer_fold: int,
+    logger: logging.Logger,
+):
+    batch_size = int(cfg["train"]["batch_size"])
+    dl_kwargs = _dataloader_kwargs(cfg)
+
+    (
+        train_base_dataset,
+        test_base_dataset,
+        train_rad_targets,
+        test_rad_targets,
+        radiomics_dim,
+        feature_names,
+    ) = _prepare_fold_radiomics_features(
+        cfg=cfg,
+        gene_list_path=gene_list_path,
+        outer_fold=outer_fold,
+        logger=logger,
+    )
 
     train_dataset = RadiomicsTargetDataset(train_base_dataset, train_rad_targets)
     test_dataset = RadiomicsTargetDataset(test_base_dataset, test_rad_targets)
-
-    dl_kwargs = _dataloader_kwargs(cfg)
 
     train_loader = DataLoader(
         train_dataset,
@@ -269,33 +282,48 @@ def build_gene_dataloaders(
     cfg: dict,
     gene_list_path: str,
     outer_fold: int,
+    logger: logging.Logger,
 ):
-    bench_data_root = cfg["paths"]["bench_data_root"]
     batch_size = int(cfg["train"]["batch_size"])
-    normalize_expression = bool(cfg.get("data", {}).get("normalize_gene_expression", True))
-
-    train_transform, eval_transform = build_transforms()
-    train_csv, test_csv = build_fold_csv_paths(bench_data_root, outer_fold)
-
-    train_dataset = STNetDataset(
-        bench_data_root=bench_data_root,
-        gene_list_path=gene_list_path,
-        split_csv_path=train_csv,
-        transforms_=train_transform,
-        normalize_expression=normalize_expression,
-    )
-    test_dataset = STNetDataset(
-        bench_data_root=bench_data_root,
-        gene_list_path=gene_list_path,
-        split_csv_path=test_csv,
-        transforms_=eval_transform,
-        normalize_expression=normalize_expression,
-    )
-
-    _, sample_target = train_dataset[0]
-    num_genes = int(sample_target.shape[0])
-
+    fusion_mode = str(cfg["model"].get("fusion_mode", "img_radpred"))
     dl_kwargs = _dataloader_kwargs(cfg)
+
+    if fusion_mode == "img_rawrad":
+        (
+            train_base_dataset,
+            test_base_dataset,
+            train_rad_features,
+            test_rad_features,
+            _radiomics_dim,
+            _feature_names,
+        ) = _prepare_fold_radiomics_features(
+            cfg=cfg,
+            gene_list_path=gene_list_path,
+            outer_fold=outer_fold,
+            logger=logger,
+        )
+
+        train_dataset = GeneWithRadiomicsDataset(
+            base_dataset=train_base_dataset,
+            radiomics_features=train_rad_features,
+        )
+        test_dataset = GeneWithRadiomicsDataset(
+            base_dataset=test_base_dataset,
+            radiomics_features=test_rad_features,
+        )
+
+        _, _, sample_target = train_dataset[0]
+        num_genes = int(sample_target.shape[0])
+
+    else:
+        train_dataset, test_dataset = _build_base_st_datasets(
+            cfg=cfg,
+            gene_list_path=gene_list_path,
+            outer_fold=outer_fold,
+        )
+
+        _, sample_target = train_dataset[0]
+        num_genes = int(sample_target.shape[0])
 
     train_loader = DataLoader(
         train_dataset,
@@ -317,26 +345,43 @@ def build_test_loader(
     cfg: dict,
     gene_list_path: str,
     outer_fold: int,
+    logger: logging.Logger,
 ):
-    bench_data_root = cfg["paths"]["bench_data_root"]
     batch_size = int(cfg["train"]["batch_size"])
-    normalize_expression = bool(cfg.get("data", {}).get("normalize_gene_expression", True))
-
-    _, eval_transform = build_transforms()
-    _, test_csv = build_fold_csv_paths(bench_data_root, outer_fold)
-
-    test_dataset = STNetDataset(
-        bench_data_root=bench_data_root,
-        gene_list_path=gene_list_path,
-        split_csv_path=test_csv,
-        transforms_=eval_transform,
-        normalize_expression=normalize_expression,
-    )
-
-    _, sample_target = test_dataset[0]
-    num_genes = int(sample_target.shape[0])
-
+    fusion_mode = str(cfg["model"].get("fusion_mode", "img_radpred"))
     dl_kwargs = _dataloader_kwargs(cfg)
+
+    if fusion_mode == "img_rawrad":
+        (
+            _train_base_dataset,
+            test_base_dataset,
+            _train_rad_features,
+            test_rad_features,
+            _radiomics_dim,
+            _feature_names,
+        ) = _prepare_fold_radiomics_features(
+            cfg=cfg,
+            gene_list_path=gene_list_path,
+            outer_fold=outer_fold,
+            logger=logger,
+        )
+
+        test_dataset = GeneWithRadiomicsDataset(
+            base_dataset=test_base_dataset,
+            radiomics_features=test_rad_features,
+        )
+        _, _, sample_target = test_dataset[0]
+        num_genes = int(sample_target.shape[0])
+
+    else:
+        _train_dataset, test_dataset = _build_base_st_datasets(
+            cfg=cfg,
+            gene_list_path=gene_list_path,
+            outer_fold=outer_fold,
+        )
+
+        _, sample_target = test_dataset[0]
+        num_genes = int(sample_target.shape[0])
 
     test_loader = DataLoader(
         test_dataset,

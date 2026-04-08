@@ -29,6 +29,26 @@ def resolve_device(cfg: dict) -> torch.device:
     return torch.device(requested)
 
 
+def resolve_run_flags(args, cfg: dict) -> tuple[bool, bool]:
+    """
+    args.mode 우선.
+    mode가 명시되면 config의 run_train/run_eval보다 우선한다.
+    """
+    mode = getattr(args, "mode", None)
+
+    if mode == "train":
+        return True, False
+    if mode == "eval":
+        return False, True
+    if mode == "all":
+        return True, True
+
+    # mode가 없거나 애매하면 config 따름
+    run_train = bool(cfg["runtime"].get("run_train", True))
+    run_eval = bool(cfg["runtime"].get("run_eval", True))
+    return run_train, run_eval
+
+
 def main() -> None:
     args = parse_common_args()
 
@@ -47,14 +67,28 @@ def main() -> None:
     checkpoint_dir = ensure_dir(cfg["paths"]["checkpoint_dir"])
     gene_list_path = build_gene_list_path(cfg)
 
+    # 실험 config snapshot 저장
     save_yaml(cfg, Path(checkpoint_dir) / f"config_{timestamp}.yaml")
 
     logger.info("Configuration:")
     for top_key, top_value in cfg.items():
         logger.info("  %s: %s", top_key, top_value)
 
+    fusion_mode = cfg["model"].get("fusion_mode", "img_radpred")
+    freeze_img2rad = bool(cfg["model"].get("freeze_img2rad", False))
+
+    logger.info("fusion_mode: %s", fusion_mode)
+    logger.info("freeze_img2rad: %s", freeze_img2rad)
+
+    run_train, run_eval = resolve_run_flags(args, cfg)
+    logger.info("run_train: %s", run_train)
+    logger.info("run_eval: %s", run_eval)
+
     train_reports = None
-    if args.mode == "train" or cfg["runtime"].get("run_train", True):
+
+    if run_train:
+        logger.info("=" * 100)
+        logger.info("Start training")
         train_reports = run_all_folds_training(
             cfg=cfg,
             gene_list_path=gene_list_path,
@@ -62,7 +96,10 @@ def main() -> None:
             logger=logger,
         )
 
-    if args.mode == "eval" or cfg["runtime"].get("run_eval", True):
+    if run_eval:
+        logger.info("=" * 100)
+        logger.info("Start evaluation")
+
         radiomics_dim = cfg["model"].get("radiomics_dim")
         if radiomics_dim is None:
             if train_reports is None or len(train_reports) == 0:
@@ -70,6 +107,13 @@ def main() -> None:
                     "radiomics_dim is not available. "
                     "Either run training first or set model.radiomics_dim in config."
                 )
+
+            if "radiomics_dim" not in train_reports[0]:
+                raise ValueError(
+                    "train_reports[0]['radiomics_dim'] is missing. "
+                    "Please include radiomics_dim in the training report."
+                )
+
             radiomics_dim = int(train_reports[0]["radiomics_dim"])
 
         aggregate_summary = run_all_folds_pcc_eval(

@@ -10,7 +10,7 @@ import torch.optim as optim
 
 from .engine import evaluate_loss, train_epoch
 from .loader import build_gene_dataloaders, build_radiomics_dataloaders
-from .model import ImgFeaturePlusRadPredToGeneModel, ImgToRadiomicsModel
+from .model import FusionGeneModel, ImgToRadiomicsModel
 
 
 def build_optimizer(parameters, cfg: dict):
@@ -39,6 +39,19 @@ def _build_backbone_weight_path(cfg: dict, outer_fold: int) -> str:
     )
 
 
+def _build_gene_ckpt_name(fusion_mode: str, outer_fold: int) -> str:
+    if fusion_mode == "img_radpred":
+        tag = "imgfeat_radpred_gene"
+    elif fusion_mode == "img_radhidden":
+        tag = "imgfeat_radhidden_gene"
+    elif fusion_mode == "img_rawrad":
+        tag = "imgfeat_rawrad_gene"
+    else:
+        raise ValueError(f"Unsupported fusion_mode: {fusion_mode}")
+
+    return f"{tag}_best_fold{outer_fold}.pth"
+
+
 def train_one_fold(
     outer_fold: int,
     cfg: dict,
@@ -47,16 +60,23 @@ def train_one_fold(
     logger: logging.Logger,
 ):
     checkpoint_dir = cfg["paths"]["checkpoint_dir"]
-    num_epochs_img2rad = int(cfg["train"].get("num_epochs_img2rad", cfg["train"].get("max_epochs", 50)))
-    num_epochs_gene = int(cfg["train"].get("num_epochs_gene", cfg["train"].get("max_epochs", 50)))
+    num_epochs_img2rad = int(
+        cfg["train"].get("num_epochs_img2rad", cfg["train"].get("max_epochs", 50))
+    )
+    num_epochs_gene = int(
+        cfg["train"].get("num_epochs_gene", cfg["train"].get("max_epochs", 50))
+    )
 
     rad_hidden_dims = tuple(cfg["model"].get("radiomics_head_hidden_dims", [512, 256]))
     gene_hidden_dims = tuple(cfg["model"].get("gene_head_hidden_dims", [512, 256]))
     dropout = float(cfg["model"].get("dropout", 0.1))
     freeze_img2rad = bool(cfg["model"].get("freeze_img2rad", False))
+    fusion_mode = str(cfg["model"].get("fusion_mode", "img_radpred"))
 
     logger.info("=" * 100)
     logger.info("[Fold %d] Start training", outer_fold)
+    logger.info("[Fold %d] fusion_mode=%s", outer_fold, fusion_mode)
+    logger.info("[Fold %d] freeze_img2rad=%s", outer_fold, freeze_img2rad)
 
     train_loader_rad, val_loader_rad, radiomics_dim, _ = build_radiomics_dataloaders(
         cfg=cfg,
@@ -67,6 +87,9 @@ def train_one_fold(
 
     backbone_weight_path = _build_backbone_weight_path(cfg, outer_fold)
     logger.info("[Fold %d] backbone_weight_path = %s", outer_fold, backbone_weight_path)
+
+    if cfg["model"]["radiomics_dim"]:
+        radiomics_dim = cfg["model"]["radiomics_dim"]
 
     img2rad_model = ImgToRadiomicsModel(
         radiomics_dim=radiomics_dim,
@@ -84,14 +107,21 @@ def train_one_fold(
 
     for epoch in range(1, num_epochs_img2rad + 1):
         train_loss = train_epoch(
-            img2rad_model,
-            train_loader_rad,
-            optimizer_rad,
-            criterion_rad,
-            device,
+            model=img2rad_model,
+            data_loader=train_loader_rad,
+            optimizer=optimizer_rad,
+            criterion=criterion_rad,
+            device=device,
+            fusion_mode="img_radpred",  # img2rad 단계는 rawrad 입력 안 씀
             logger=logger,
         )
-        val_loss = evaluate_loss(img2rad_model, val_loader_rad, criterion_rad, device)
+        val_loss = evaluate_loss(
+            model=img2rad_model,
+            data_loader=val_loader_rad,
+            criterion=criterion_rad,
+            device=device,
+            fusion_mode="img_radpred",
+        )
 
         logger.info(
             "[Fold %d] [Img2Rad] Epoch %02d/%02d | train_loss=%.4f | val_loss=%.4f",
@@ -113,6 +143,7 @@ def train_one_fold(
         cfg=cfg,
         gene_list_path=gene_list_path,
         outer_fold=outer_fold,
+        logger=logger,
     )
 
     pretrained_img2rad_model = ImgToRadiomicsModel(
@@ -126,10 +157,11 @@ def train_one_fold(
         torch.load(img2rad_ckpt_path, map_location=device)
     )
 
-    fusion_gene_model = ImgFeaturePlusRadPredToGeneModel(
+    fusion_gene_model = FusionGeneModel(
         pretrained_img2rad_model=pretrained_img2rad_model,
         num_genes=num_genes,
         radiomics_dim=radiomics_dim,
+        fusion_mode=fusion_mode,
         freeze_img2rad=freeze_img2rad,
         hidden_dims=gene_hidden_dims,
         dropout=dropout,
@@ -141,20 +173,25 @@ def train_one_fold(
     best_gene_val_loss = float("inf")
     gene_ckpt_path = os.path.join(
         checkpoint_dir,
-        f"imgfeat_radpred_gene_best_fold{outer_fold}.pth",
+        _build_gene_ckpt_name(fusion_mode, outer_fold),
     )
 
     for epoch in range(1, num_epochs_gene + 1):
         train_loss = train_epoch(
-            fusion_gene_model, 
-            train_loader_gene, 
-            optimizer_gene, 
-            criterion_gene, 
-            device, 
+            model=fusion_gene_model,
+            data_loader=train_loader_gene,
+            optimizer=optimizer_gene,
+            criterion=criterion_gene,
+            device=device,
+            fusion_mode=fusion_mode,
             logger=logger,
         )
         val_loss = evaluate_loss(
-            fusion_gene_model, val_loader_gene, criterion_gene, device
+            model=fusion_gene_model,
+            data_loader=val_loader_gene,
+            criterion=criterion_gene,
+            device=device,
+            fusion_mode=fusion_mode,
         )
 
         logger.info(
@@ -180,6 +217,7 @@ def train_one_fold(
 
     return {
         "outer_fold": outer_fold,
+        "fusion_mode": fusion_mode,
         "img2rad_ckpt": img2rad_ckpt_path,
         "fusion_gene_ckpt": gene_ckpt_path,
         "radiomics_dim": radiomics_dim,
@@ -212,7 +250,11 @@ def run_all_folds_training(
         )
         reports.append(report)
 
-    with open(os.path.join(checkpoint_dir, "train_reports_all_folds.json"), "w", encoding="utf-8") as f:
+    with open(
+        os.path.join(checkpoint_dir, "train_reports_all_folds.json"),
+        "w",
+        encoding="utf-8",
+    ) as f:
         json.dump(reports, f, indent=2)
 
     logger.info("All-fold training done")

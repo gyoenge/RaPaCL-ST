@@ -12,7 +12,20 @@ from .cache import safe_load_gene_names
 from .engine import predict_all
 from .loader import build_test_loader
 from .metrics import compute_genewise_pcc
-from .model import ImgFeaturePlusRadPredToGeneModel, ImgToRadiomicsModel
+from .model import FusionGeneModel, ImgToRadiomicsModel
+
+
+def _build_gene_ckpt_name(fusion_mode: str, outer_fold: int) -> str:
+    if fusion_mode == "img_radpred":
+        tag = "imgfeat_radpred_gene"
+    elif fusion_mode == "img_radhidden":
+        tag = "imgfeat_radhidden_gene"
+    elif fusion_mode == "img_rawrad":
+        tag = "imgfeat_rawrad_gene"
+    else:
+        raise ValueError(f"Unsupported fusion_mode: {fusion_mode}")
+
+    return f"{tag}_best_fold{outer_fold}.pth"
 
 
 def build_model_and_load(
@@ -27,6 +40,7 @@ def build_model_and_load(
     gene_hidden_dims = tuple(cfg["model"].get("gene_head_hidden_dims", [512, 256]))
     dropout = float(cfg["model"].get("dropout", 0.1))
     freeze_img2rad = bool(cfg["model"].get("freeze_img2rad", False))
+    fusion_mode = str(cfg["model"].get("fusion_mode", "img_radpred"))
 
     pretrained_img2rad_model = ImgToRadiomicsModel(
         radiomics_dim=radiomics_dim,
@@ -37,10 +51,11 @@ def build_model_and_load(
     ).to(device)
     pretrained_img2rad_model.load_state_dict(torch.load(img2rad_ckpt, map_location=device))
 
-    fusion_gene_model = ImgFeaturePlusRadPredToGeneModel(
+    fusion_gene_model = FusionGeneModel(
         pretrained_img2rad_model=pretrained_img2rad_model,
         num_genes=num_genes,
         radiomics_dim=radiomics_dim,
+        fusion_mode=fusion_mode,
         freeze_img2rad=freeze_img2rad,
         hidden_dims=gene_hidden_dims,
         dropout=dropout,
@@ -61,10 +76,12 @@ def evaluate_one_fold(
     logger: logging.Logger,
 ) -> Optional[Dict]:
     checkpoint_dir = cfg["paths"]["checkpoint_dir"]
+    fusion_mode = str(cfg["model"].get("fusion_mode", "img_radpred"))
 
     img2rad_ckpt = os.path.join(checkpoint_dir, f"img2rad_best_fold{outer_fold}.pth")
     fusion_gene_ckpt = os.path.join(
-        checkpoint_dir, f"imgfeat_radpred_gene_best_fold{outer_fold}.pth"
+        checkpoint_dir,
+        _build_gene_ckpt_name(fusion_mode, outer_fold),
     )
 
     if not os.path.exists(img2rad_ckpt):
@@ -76,13 +93,15 @@ def evaluate_one_fold(
 
     logger.info("=" * 80)
     logger.info("[Fold %d] Start evaluation", outer_fold)
-    logger.info("[Fold %d] img2rad_ckpt     : %s", outer_fold, img2rad_ckpt)
-    logger.info("[Fold %d] fusion_gene_ckpt : %s", outer_fold, fusion_gene_ckpt)
+    logger.info("[Fold %d] fusion_mode      : %s", outer_fold, fusion_mode)
+    logger.info("[Fold %d] img2rad_ckpt    : %s", outer_fold, img2rad_ckpt)
+    logger.info("[Fold %d] fusion_gene_ckpt: %s", outer_fold, fusion_gene_ckpt)
 
     test_loader, inferred_num_genes = build_test_loader(
         cfg=cfg,
         gene_list_path=gene_list_path,
         outer_fold=outer_fold,
+        logger=logger,
     )
 
     if configured_num_genes != inferred_num_genes:
@@ -103,7 +122,12 @@ def evaluate_one_fold(
         fusion_gene_ckpt=fusion_gene_ckpt,
     )
 
-    preds, targets = predict_all(model, test_loader, device)
+    preds, targets = predict_all(
+        model=model,
+        data_loader=test_loader,
+        device=device,
+        fusion_mode=fusion_mode,
+    )
     mean_pcc, gene_pccs = compute_genewise_pcc(targets, preds)
 
     logger.info("[Fold %d] num_test_samples = %d", outer_fold, targets.shape[0])
@@ -134,6 +158,7 @@ def evaluate_one_fold(
         json.dump(
             {
                 "outer_fold": outer_fold,
+                "fusion_mode": fusion_mode,
                 "mean_pcc": mean_pcc,
                 "num_test_samples": int(targets.shape[0]),
                 "num_genes": int(num_genes),
@@ -270,6 +295,7 @@ def run_all_folds_pcc_eval(
 
     folds_to_eval = list(cfg["runtime"]["folds"])
     num_genes = int(cfg["model"]["num_genes"])
+    fusion_mode = str(cfg["model"].get("fusion_mode", "img_radpred"))
 
     logger.info("=" * 100)
     logger.info("Start all-fold PCC evaluation")
@@ -278,6 +304,7 @@ def run_all_folds_pcc_eval(
     logger.info("save_dir        = %s", save_dir)
     logger.info("folds_to_eval   = %s", folds_to_eval)
     logger.info("radiomics_dim   = %d", radiomics_dim)
+    logger.info("fusion_mode     = %s", fusion_mode)
     logger.info("batch_size      = %d", int(cfg["train"]["batch_size"]))
     logger.info("num_genes(conf) = %d", num_genes)
 

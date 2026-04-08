@@ -25,7 +25,7 @@ train:
   lr: 1.0e-4 # =0.0001
   weight_decay: 1.0e-4 # =0.0001
   optimizer_name: adamw
-  num_workers: 8 # 0
+  num_workers: 0 # 8 --> torch_shm_manager: symbol lookup error (torch_shm_manager: symbol lookup error) -- PyTorch shared memory (multiprocessing) 깨짐
   pin_memory: true
 
 runtime:
