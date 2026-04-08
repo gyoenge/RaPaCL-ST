@@ -88,7 +88,7 @@ def train_one_fold(
     backbone_weight_path = _build_backbone_weight_path(cfg, outer_fold)
     logger.info("[Fold %d] backbone_weight_path = %s", outer_fold, backbone_weight_path)
 
-    if cfg["model"]["radiomics_dim"]:
+    if cfg["model"].get("radiomics_dim") is not None:
         radiomics_dim = cfg["model"]["radiomics_dim"]
 
     img2rad_model = ImgToRadiomicsModel(
