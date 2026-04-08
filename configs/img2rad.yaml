@@ -66,9 +66,9 @@ data:
 
   radiomics_valid_prefixes:
     - original_
-    # - squareroot_
-    # - logarithm_
-    # - wavelet-
-    # - exponential_
-    # - square_
-    # - log-sigma-
+    - squareroot_
+    - logarithm_
+    - wavelet-
+    - exponential_
+    - square_
+    - log-sigma-

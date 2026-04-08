@@ -70,5 +70,5 @@ done
 
 
 # run: 
-# chmod +x scripts/run_img2rad_prefix_ablation.sh
-# ./scripts/run_img2rad_prefix_ablation.sh
+# chmod +x scripts/run_img2rad_filter-prefix_ablation.sh
+# ./scripts/run_img2rad_prefix_filter-ablation.sh
