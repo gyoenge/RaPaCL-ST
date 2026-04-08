@@ -8,7 +8,7 @@ mkdir -p "$GEN_CONFIG_DIR"
 PYTHON_BIN="python"
 
 # ARCHS=("radpred" "radhidden" "rawrad")
-ARCHS=("rawrad" "radhidden" "radpred")
+ARCHS=("rawrad" "radhidden")
 
 for arch in "${ARCHS[@]}"; do
   case "$arch" in
@@ -19,7 +19,8 @@ for arch in "${ARCHS[@]}"; do
       ;;
     radhidden)
       FUSION_MODE="img_radhidden"
-      FREEZE="true"
+      FREEZE="false"
+      # FREEZE="true"
       TAG="v1_imgRadHiddenFreeze"
       ;;
     rawrad)
