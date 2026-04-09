@@ -1,334 +1,79 @@
-# TransTab pretrain (offline)
-# Original TransTab Implementation: https://github.com/RyanWangZf/transtab/blob/main/transtab/transtab.py 
-# This is modification of TransTab, for radiomics feature tabular model. 
+from __future__ import annotations
 
-import pdb
+import json
 import os
+from pathlib import Path
+from typing import Any
 
-from RaPaCL.src.rapacl.pretrain_transtab import constants
-from transtab.modeling_transtab import TransTabClassifier, TransTabRegressor, TransTabFeatureExtractor, TransTabFeatureProcessor
+import pandas as pd
+
+from src.common.config import load_yaml, parse_common_args, apply_cli_overrides
+from src.common.logger import setup_logger
+from src.common.utils import ensure_dir, save_yaml, seed_everything
+
+from transtab import constants
 from transtab.modeling_transtab import TransTabForCL
-from transtab.modeling_transtab import TransTabInputEncoder, TransTabModel
-from transtab.dataset import load_data
-from transtab.evaluator import predict, evaluate
 from transtab.trainer import Trainer
 from transtab.trainer_utils import TransTabCollatorForCL
-from transtab.trainer_utils import random_seed
 
-def build_classifier(
-    categorical_columns=None,
-    numerical_columns=None,
-    binary_columns=None,
-    feature_extractor=None,
-    num_class=2,
-    hidden_dim=128,
-    num_layer=2,
-    num_attention_head=8,
-    hidden_dropout_prob=0,
-    ffn_dim=256,
-    activation='relu',
-    device='cuda:0',
-    checkpoint=None,
-    **kwargs) -> TransTabClassifier:
-    '''Build a :class:`transtab.modeling_transtab.TransTabClassifier`.
+try:
+    import wandb
+except ImportError:
+    wandb = None
 
-    Parameters
-    ----------
-    categorical_columns: list 
-        a list of categorical feature names.
 
-    numerical_columns: list
-        a list of numerical feature names.
+def read_feature_list(txt_path: str | Path) -> list[str]:
+    txt_path = Path(txt_path)
+    if not txt_path.exists():
+        raise FileNotFoundError(f"Feature txt file not found: {txt_path}")
 
-    binary_columns: list
-        a list of binary feature names, accept binary indicators like (yes,no); (true,false); (0,1).
-    
-    feature_extractor: TransTabFeatureExtractor
-        a feature extractor to tokenize the input tables. if not passed the model will build itself.
+    with open(txt_path, "r", encoding="utf-8") as f:
+        return [line.strip().lower() for line in f if line.strip()]
 
-    num_class: int
-        number of output classes to be predicted.
 
-    hidden_dim: int
-        the dimension of hidden embeddings.
-    
-    num_layer: int
-        the number of transformer layers used in the encoder.
-    
-    num_attention_head: int
-        the numebr of heads of multihead self-attention layer in the transformers.
+def load_custom_transtab_dataset(
+    data_root: str | Path,
+    data_csv: str,
+    numerical_feature_file: str,
+    target_col: str,
+    binary_feature_file: str | None = None,
+):
+    data_root = Path(data_root)
 
-    hidden_dropout_prob: float
-        the dropout ratio in the transformer encoder.
+    csv_path = data_root / data_csv
+    num_path = data_root / numerical_feature_file
 
-    ffn_dim: int
-        the dimension of feed-forward layer in the transformer layer.
-    
-    activation: str
-        the name of used activation functions, support ``"relu"``, ``"gelu"``, ``"selu"``, ``"leakyrelu"``.
-    
-    device: str
-        the device, ``"cpu"`` or ``"cuda:0"``.
-    
-    checkpoint: str
-        the directory to load the pretrained TransTab model.
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV file not found: {csv_path}")
+    if not num_path.exists():
+        raise FileNotFoundError(f"Numerical feature file not found: {num_path}")
 
-    Returns
-    -------
-    A TransTabClassifier model.
+    df = pd.read_csv(csv_path)
+    df.columns = [str(c).lower() for c in df.columns]
+    target_col = target_col.lower()
 
-    '''
-    model = TransTabClassifier(
-        categorical_columns = categorical_columns,
-        numerical_columns = numerical_columns,
-        binary_columns = binary_columns,
-        feature_extractor = feature_extractor,
-        num_class=num_class,
-        hidden_dim=hidden_dim,
-        num_layer=num_layer,
-        num_attention_head=num_attention_head,
-        hidden_dropout_prob=hidden_dropout_prob,
-        ffn_dim=ffn_dim,
-        activation=activation,
-        device=device,
-        **kwargs,
-        )
-    
-    if checkpoint is not None:
-        model.load(checkpoint)
+    if target_col not in df.columns:
+        raise KeyError(f"Target column not found: {target_col}")
 
-    return model
+    numerical_columns = read_feature_list(num_path)
 
-def build_regressor(
-    categorical_columns=None,
-    numerical_columns=None,
-    binary_columns=None,
-    feature_extractor=None,
-    num_class=1,
-    hidden_dim=128,
-    num_layer=2,
-    num_attention_head=8,
-    hidden_dropout_prob=0,
-    ffn_dim=256,
-    activation='relu',
-    device='cuda:0',
-    checkpoint=None,
-    **kwargs) -> TransTabRegressor:
-    '''Build a :class:`transtab.modeling_transtab.TransTabRegressor`.
+    binary_columns = []
+    if binary_feature_file is not None:
+        bin_path = data_root / binary_feature_file
+        if bin_path.exists():
+            binary_columns = read_feature_list(bin_path)
 
-    Parameters
-    ----------
-    categorical_columns: list 
-        a list of categorical feature names.
+    numerical_columns = [c for c in numerical_columns if c in df.columns and c != target_col]
+    binary_columns = [c for c in binary_columns if c in df.columns and c != target_col]
 
-    numerical_columns: list
-        a list of numerical feature names.
+    used = set(numerical_columns) | set(binary_columns) | {target_col}
+    categorical_columns = [c for c in df.columns if c not in used]
 
-    binary_columns: list
-        a list of binary feature names, accept binary indicators like (yes,no); (true,false); (0,1).
-    
-    feature_extractor: TransTabFeatureExtractor
-        a feature extractor to tokenize the input tables. if not passed the model will build itself.
+    x = df.drop(columns=[target_col])
+    y = df[target_col]
 
-    num_class: int
-        number of output classes to be predicted.
+    return (x, y), categorical_columns, numerical_columns, binary_columns
 
-    hidden_dim: int
-        the dimension of hidden embeddings.
-    
-    num_layer: int
-        the number of transformer layers used in the encoder.
-    
-    num_attention_head: int
-        the numebr of heads of multihead self-attention layer in the transformers.
-
-    hidden_dropout_prob: float
-        the dropout ratio in the transformer encoder.
-
-    ffn_dim: int
-        the dimension of feed-forward layer in the transformer layer.
-    
-    activation: str
-        the name of used activation functions, support ``"relu"``, ``"gelu"``, ``"selu"``, ``"leakyrelu"``.
-    
-    device: str
-        the device, ``"cpu"`` or ``"cuda:0"``.
-    
-    checkpoint: str
-        the directory to load the pretrained TransTab model.
-
-    Returns
-    -------
-    A TransTabClassifier model.
-
-    '''
-    model = TransTabRegressor(
-        categorical_columns = categorical_columns,
-        numerical_columns = numerical_columns,
-        binary_columns = binary_columns,
-        feature_extractor = feature_extractor,
-        num_class=num_class,
-        hidden_dim=hidden_dim,
-        num_layer=num_layer,
-        num_attention_head=num_attention_head,
-        hidden_dropout_prob=hidden_dropout_prob,
-        ffn_dim=ffn_dim,
-        activation=activation,
-        device=device,
-        **kwargs,
-        )
-    
-    if checkpoint is not None:
-        model.load(checkpoint)
-
-    return model
-
-def build_extractor(
-    categorical_columns=None,
-    numerical_columns=None,
-    binary_columns=None,
-    ignore_duplicate_cols=False,
-    disable_tokenizer_parallel=False,
-    checkpoint=None,
-    **kwargs,) -> TransTabFeatureExtractor:
-    '''Build a feature extractor for TransTab model.
-
-    Parameters
-    ----------
-    categorical_columns: list 
-        a list of categorical feature names.
-
-    numerical_columns: list
-        a list of numerical feature names.
-
-    binary_columns: list
-        a list of binary feature names, accept binary indicators like (yes,no); (true,false); (0,1).
-
-    ignore_duplicate_cols: bool
-        if there is one column assigned to more than one type, e.g., the feature age is both nominated
-        as categorical and binary columns, the model will raise errors. set True to avoid this error as 
-        the model will ignore this duplicate feature.
-
-    disable_tokenizer_parallel: bool
-        if the returned feature extractor is leveraged by the collate function for a dataloader,
-        try to set this False in case the dataloader raises errors because the dataloader builds 
-        multiple workers and the tokenizer builds multiple workers at the same time.
-
-    checkpoint: str
-        the directory of the predefined TransTabFeatureExtractor.
-
-    Returns
-    -------
-    A TransTabFeatureExtractor module.
-
-    '''
-    feature_extractor = TransTabFeatureExtractor(
-        categorical_columns=categorical_columns,
-        numerical_columns=numerical_columns,
-        binary_columns=binary_columns,
-        disable_tokenizer_parallel=disable_tokenizer_parallel,
-        ignore_duplicate_cols=ignore_duplicate_cols,
-    )
-    if checkpoint is not None:
-        extractor_path = os.path.join(checkpoint, constants.EXTRACTOR_STATE_DIR)
-        if os.path.exists(extractor_path):
-            feature_extractor.load(extractor_path)
-        else:
-            feature_extractor.load(checkpoint)
-    return feature_extractor
-
-def build_encoder(
-    categorical_columns=None,
-    numerical_columns=None,
-    binary_columns=None,
-    hidden_dim=128,
-    num_layer=2,
-    num_attention_head=8,
-    hidden_dropout_prob=0,
-    ffn_dim=256,
-    activation='relu',
-    device='cuda:0',
-    checkpoint=None,
-    **kwargs,
-    ):
-    '''
-    Build a feature encoder that maps inputs tabular samples to embeddings.
-    
-    Parameters
-    ----------
-    categorical_columns: list 
-        a list of categorical feature names.
-
-    numerical_columns: list
-        a list of numerical feature names.
-
-    binary_columns: list
-        a list of binary feature names, accept binary indicators like (yes,no); (true,false); (0,1).
-    
-    hidden_dim: int
-        the dimension of hidden embeddings.
-    
-    num_layer: int
-        the number of transformer layers used in the encoder. If set zero, only use the
-        embedding layer to get token-level embeddings.
-    
-    num_attention_head: int
-        the numebr of heads of multihead self-attention layer in the transformers.
-        Ignored if `num_layer=0` is zero.
-
-    hidden_dropout_prob: float
-        the dropout ratio in the transformer encoder.
-        Ignored if `num_layer=0` is zero.
-
-    ffn_dim: int
-        the dimension of feed-forward layer in the transformer layer.
-        Ignored if `num_layer=0` is zero.
-
-    activation: str
-        the name of used activation functions, support ``"relu"``, ``"gelu"``, ``"selu"``, ``"leakyrelu"``.
-        Ignored if `num_layer=0` is zero.
-    
-    device: str
-        the device, ``"cpu"`` or ``"cuda:0"``.
-    
-    checkpoint: str
-        the directory to load the pretrained TransTab model.
-    '''
-    if num_layer == 0:
-        feature_extractor = TransTabFeatureExtractor(
-            categorical_columns=categorical_columns,
-            numerical_columns=numerical_columns,
-            binary_columns=binary_columns,
-            )
-        
-        feature_processor = TransTabFeatureProcessor(
-            vocab_size=feature_extractor.vocab_size,
-            pad_token_id=feature_extractor.pad_token_id,
-            hidden_dim=hidden_dim,
-            hidden_dropout_prob=hidden_dropout_prob,
-            device=device,
-            )
-
-        enc = TransTabInputEncoder(feature_extractor, feature_processor)
-        enc.load(checkpoint)
-        
-    else:
-        enc = TransTabModel(
-            categorical_columns=categorical_columns,
-            numerical_columns=numerical_columns,
-            binary_columns=binary_columns,
-            hidden_dim=hidden_dim,
-            num_layer=num_layer,
-            num_attention_head=num_attention_head,
-            hidden_dropout_prob=hidden_dropout_prob,
-            ffn_dim=ffn_dim,
-            activation=activation,
-            device=device,
-            )
-        if checkpoint is not None:
-            enc.load(checkpoint)
-
-    return enc
 
 def build_contrastive_learner(
     categorical_columns=None,
@@ -343,92 +88,17 @@ def build_contrastive_learner(
     num_attention_head=8,
     hidden_dropout_prob=0,
     ffn_dim=256,
-    activation='relu',
-    device='cuda:0',
+    activation="relu",
+    device="cuda:0",
     checkpoint=None,
     ignore_duplicate_cols=True,
     **kwargs,
-    ): 
-    '''Build a contrastive learner for pretraining based on TransTab.
-    If no cat/num/bin specified, the model takes ALL as categorical columns,
-    which may undermine the performance significantly.
-
-    If there is one column assigned to more than one type, e.g., the feature age is both nominated
-    as categorical and binary columns, the model will raise errors. set ``ignore_duplicate_cols=True`` to avoid this error as 
-    the model will ignore this duplicate feature.
-
-    Parameters
-    ----------
-    categorical_columns: list 
-        a list of categorical feature names.
-
-    numerical_columns: list
-        a list of numerical feature names.
-
-    binary_columns: list
-        a list of binary feature names, accept binary indicators like (yes,no); (true,false); (0,1).
-    
-    feature_extractor: TransTabFeatureExtractor
-        a feature extractor to tokenize the input tables. if not passed the model will build itself.
-
-    hidden_dim: int
-        the dimension of hidden embeddings.
-    
-    num_layer: int
-        the number of transformer layers used in the encoder.
-    
-    num_attention_head: int
-        the numebr of heads of multihead self-attention layer in the transformers.
-
-    hidden_dropout_prob: float
-        the dropout ratio in the transformer encoder.
-
-    ffn_dim: int
-        the dimension of feed-forward layer in the transformer layer.
-    
-    projection_dim: int
-        the dimension of projection head on the top of encoder.
-    
-    overlap_ratio: float
-        the overlap ratio of columns of different partitions when doing subsetting.
-    
-    num_partition: int
-        the number of partitions made for vertical-partition contrastive learning.
-
-    supervised: bool
-        whether or not to take supervised VPCL, otherwise take self-supervised VPCL.
-    
-    temperature: float
-        temperature used to compute logits for contrastive learning.
-
-    base_temperature: float
-        base temperature used to normalize the temperature.
-    
-    activation: str
-        the name of used activation functions, support ``"relu"``, ``"gelu"``, ``"selu"``, ``"leakyrelu"``.
-    
-    device: str
-        the device, ``"cpu"`` or ``"cuda:0"``.
-
-    checkpoint: str
-        the directory of the pretrained transtab model.
-    
-    ignore_duplicate_cols: bool
-        if there is one column assigned to more than one type, e.g., the feature age is both nominated
-        as categorical and binary columns, the model will raise errors. set True to avoid this error as 
-        the model will ignore this duplicate feature.
-    
-    Returns
-    -------
-    A TransTabForCL model.
-
-    '''
-
+):
     model = TransTabForCL(
-        categorical_columns = categorical_columns,
-        numerical_columns = numerical_columns,
-        binary_columns = binary_columns,
-        num_partition= num_partition,
+        categorical_columns=categorical_columns,
+        numerical_columns=numerical_columns,
+        binary_columns=binary_columns,
+        num_partition=num_partition,
         hidden_dim=hidden_dim,
         num_layer=num_layer,
         num_attention_head=num_attention_head,
@@ -440,25 +110,30 @@ def build_contrastive_learner(
         activation=activation,
         device=device,
     )
+
     if checkpoint is not None:
         model.load(checkpoint)
-    
-    # build collate function for contrastive learning
+
     collate_fn = TransTabCollatorForCL(
         categorical_columns=categorical_columns,
         numerical_columns=numerical_columns,
         binary_columns=binary_columns,
         overlap_ratio=overlap_ratio,
         num_partition=num_partition,
-        ignore_duplicate_cols=ignore_duplicate_cols
+        ignore_duplicate_cols=ignore_duplicate_cols,
     )
+
     if checkpoint is not None:
-        collate_fn.feature_extractor.load(os.path.join(checkpoint, constants.EXTRACTOR_STATE_DIR))
+        extractor_state_dir = os.path.join(checkpoint, constants.EXTRACTOR_STATE_DIR)
+        if os.path.exists(extractor_state_dir):
+            collate_fn.feature_extractor.load(extractor_state_dir)
 
     return model, collate_fn
 
-def train(model, 
-    trainset, 
+
+def train(
+    model,
+    trainset,
     valset=None,
     num_epoch=10,
     batch_size=64,
@@ -468,8 +143,8 @@ def train(model,
     patience=5,
     warmup_ratio=None,
     warmup_steps=None,
-    eval_metric='auc',
-    output_dir='./ckpt',
+    eval_metric="auc",
+    output_dir="./ckpt",
     collate_fn=None,
     num_workers=0,
     balance_sample=False,
@@ -477,95 +152,29 @@ def train(model,
     ignore_duplicate_cols=False,
     eval_less_is_better=False,
     **kwargs,
-    ):
-    '''
-    The shared train function for all TransTabModel based models.
-
-    Parameters
-    ----------
-    model: TransTabModel and its subclass
-        A subclass of the base model. Should be able to output logits and loss in forward, e.g.,
-        ``logit, loss = model(x, y)``.
-    
-    trainset: list or tuple
-        a list of trainsets, or a single trainset consisting of (x, y). x: pd.DataFrame or dict, y: pd.Series.
-    
-    valset: list or tuple
-        a list of valsets, or a single valset of consisting of (x, y).
-    
-    num_epoch: int
-        number of training epochs.
-    
-    batch_size: int
-        training batch size.
-    
-    eval_batch_size: int
-        evaluation batch size.
-
-    lr: float
-        training learning rate.
-
-    weight_decay: float
-        training weight decay.
-    
-    patience: int
-        early stopping patience, only valid when ``valset`` is given.
-    
-    warmup_ratio: float
-        the portion of training steps for learning rate warmup, if `warmup_steps` is set, it will be ignored.
-    
-    warmup_steps: int
-        the number of training steps for learning rate warmup.
-    
-    eval_metric: str
-        the evaluation metric during training for early stopping, can be ``"acc"``, ``"auc"``, ``"mse"``, ``"val_loss"``.
-    
-    output_dir: str
-        the output training model weights and feature extractor configurations.
-    
-    collate_fn: function
-        specify training collate function if it is not standard supervised learning, e.g., contrastive learning.
-
-    num_workers: int
-        the number of workers for the dataloader.
-    
-    balance_sample: bool
-        balance_sample: whether or not do bootstrapping to maintain in batch samples are in balanced classes, only support binary classification.
-    
-    load_best_at_last: bool
-        whether or not load the best checkpoint after the training completes.
-
-    ignore_duplicate_cols: bool
-        whether or not ignore the contradictory of cat/num/bin cols
-
-    eval_less_is_better: bool
-        if the set eval_metric is the less the better. For val_loss, it should be set True.
-    
-    Returns
-    -------
-        None
-        
-    '''
-    if isinstance(trainset, tuple): trainset = [trainset]
+):
+    if isinstance(trainset, tuple):
+        trainset = [trainset]
 
     train_args = {
-        'num_epoch': num_epoch,
-        'batch_size': batch_size,
-        'eval_batch_size': eval_batch_size,
-        'lr': lr,
-        'weight_decay':weight_decay,
-        'patience':patience,
-        'warmup_ratio':warmup_ratio,
-        'warmup_steps':warmup_steps,
-        'eval_metric':eval_metric,
-        'output_dir':output_dir,
-        'collate_fn':collate_fn,
-        'num_workers':num_workers,
-        'balance_sample':balance_sample,
-        'load_best_at_last':load_best_at_last,
-        'ignore_duplicate_cols':ignore_duplicate_cols,
-        'eval_less_is_better':eval_less_is_better,
+        "num_epoch": num_epoch,
+        "batch_size": batch_size,
+        "eval_batch_size": eval_batch_size,
+        "lr": lr,
+        "weight_decay": weight_decay,
+        "patience": patience,
+        "warmup_ratio": warmup_ratio,
+        "warmup_steps": warmup_steps,
+        "eval_metric": eval_metric,
+        "output_dir": output_dir,
+        "collate_fn": collate_fn,
+        "num_workers": num_workers,
+        "balance_sample": balance_sample,
+        "load_best_at_last": load_best_at_last,
+        "ignore_duplicate_cols": ignore_duplicate_cols,
+        "eval_less_is_better": eval_less_is_better,
     }
+
     trainer = Trainer(
         model,
         trainset,
@@ -575,43 +184,165 @@ def train(model,
     trainer.train()
 
 
-#########
+def _flatten_dict(d: dict[str, Any], parent_key: str = "", sep: str = ".") -> dict[str, Any]:
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(_flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
-def main():
-    # parquet -> config 참고해서 열 필터링해서 불러오고 -> target_label 빈 거 추가. 
-    # --> data_processed.csv 
-    # numerical_feature.txt 에 모든 feature column 이름 넣기 
-    # binary_feature.txt 는 빈 걸로? 또는 아예 파일 없게? 
-    """
-    코드가 이렇게 처리:
 
-    전체 컬럼
-    minus numerical
-    minus binary
-    남은 것 = categorical
-        
-    """
-    """
-    컬럼명 처리에서 주의할 점:
-    코드가 로컬 CSV를 읽은 뒤 모든 컬럼명을 소문자(lowercase) 로 바꾼다. 
-    numerical_feature.txt, binary_feature.txt, dataset_config에 적는 컬럼명을
-        소문자 기준으로 맞추는 게 안전. 
-    """
-    """
-    각 타입별 전처리 방식:
+def init_wandb(cfg: dict[str, Any], run_dir: Path):
+    wandb_cfg = cfg.get("wandb", {})
+    enabled = wandb_cfg.get("enabled", False)
 
-    numerical
-        결측치는 mode로 채움 (결측치(NaN)를 그 컬럼에서 가장 많이 등장한 값으로 채운다는 뜻)
-        MinMaxScaler() 적용해서 0~1 스케일링
-    categorical
-        결측치는 mode로 채움
-        encode_cat=False이면 문자열 그대로 둠
-        encode_cat=True이면 OrdinalEncoder로 정수 인코딩
-    binary
-        결측치는 mode로 채움
-        문자열을 0/1로 바꿈
-        기본 기준은 yes/true/1/t
-        또는 dataset_config["binary_indicator"]를 따름
-    
-    """
-    pass 
+    if not enabled:
+        return None
+
+    if wandb is None:
+        raise ImportError("wandb is not installed. Please `pip install wandb`.")
+
+    run = wandb.init(
+        project=wandb_cfg.get("project", cfg["experiment"].get("project_name", "default-project")),
+        entity=wandb_cfg.get("entity"),
+        name=wandb_cfg.get("run_name") or cfg["experiment"]["name"],
+        tags=wandb_cfg.get("tags"),
+        notes=wandb_cfg.get("notes"),
+        config=_flatten_dict(cfg),
+        dir=str(run_dir),
+    )
+
+    wandb.save(str(run_dir / "config_final.yaml"))
+    return run
+
+
+def save_column_info(
+    run_dir: Path,
+    categorical_columns: list[str],
+    numerical_columns: list[str],
+    binary_columns: list[str],
+) -> None:
+    info = {
+        "categorical_columns": categorical_columns,
+        "numerical_columns": numerical_columns,
+        "binary_columns": binary_columns,
+        "num_categorical": len(categorical_columns),
+        "num_numerical": len(numerical_columns),
+        "num_binary": len(binary_columns),
+    }
+
+    with open(run_dir / "column_info.json", "w", encoding="utf-8") as f:
+        json.dump(info, f, indent=2, ensure_ascii=False)
+
+
+def main() -> None:
+    args = parse_common_args()
+
+    cfg = load_yaml(args.config)
+    cfg = apply_cli_overrides(cfg, args)
+    cfg["mode"] = args.mode
+
+    seed = cfg.get("seed", 42)
+    seed_everything(seed)
+
+    log_dir = cfg["paths"]["log_dir"]
+    timestamp, logger = setup_logger(log_dir, name="pretrain_transtab")
+
+    logger.info("Loaded config from: %s", args.config)
+    logger.info("Execution mode: %s", args.mode)
+    logger.info("Device: %s", cfg["runtime"].get("device"))
+    logger.info("Batch size: %s", cfg["train"].get("batch_size"))
+    logger.info("Learning rate: %s", cfg["train"].get("lr"))
+
+    output_root = ensure_dir(cfg["paths"]["output_root"])
+    run_dir = ensure_dir(output_root / f"run_{timestamp}")
+    checkpoint_dir = ensure_dir(cfg["paths"]["checkpoint_dir"])
+
+    if cfg["experiment"].get("save_config", True):
+        save_yaml(cfg, run_dir / "config_final.yaml")
+        logger.info("Final config saved to: %s", run_dir / "config_final.yaml")
+
+    logger.info("Preparing custom TransTab dataset from: %s", cfg["paths"]["data_root"])
+    trainset, categorical_columns, numerical_columns, binary_columns = load_custom_transtab_dataset(
+        data_root=cfg["paths"]["data_root"],
+        data_csv=cfg["data"]["data_csv"],
+        numerical_feature_file=cfg["data"]["numerical_feature_file"],
+        binary_feature_file=cfg["data"].get("binary_feature_file"),
+        target_col=cfg["data"]["target_col"],
+    )
+
+    logger.info("Detected column types:")
+    logger.info("  categorical: %d", len(categorical_columns))
+    logger.info("  numerical  : %d", len(numerical_columns))
+    logger.info("  binary     : %d", len(binary_columns))
+
+    save_column_info(
+        run_dir=run_dir,
+        categorical_columns=categorical_columns,
+        numerical_columns=numerical_columns,
+        binary_columns=binary_columns,
+    )
+
+    wb_run = init_wandb(cfg, run_dir)
+    if wb_run is not None:
+        wandb.config.update(
+            {
+                "num_categorical_columns": len(categorical_columns),
+                "num_numerical_columns": len(numerical_columns),
+                "num_binary_columns": len(binary_columns),
+            }
+        )
+
+    model_cfg = cfg["model"]
+    train_cfg = cfg["train"]
+
+    model, collate_fn = build_contrastive_learner(
+        categorical_columns=categorical_columns,
+        numerical_columns=numerical_columns,
+        binary_columns=binary_columns,
+        projection_dim=model_cfg["projection_dim"],
+        num_partition=model_cfg["num_partition"],
+        overlap_ratio=model_cfg["overlap_ratio"],
+        supervised=model_cfg["supervised"],
+        hidden_dim=model_cfg["hidden_dim"],
+        num_layer=model_cfg["num_layer"],
+        num_attention_head=model_cfg["num_attention_head"],
+        hidden_dropout_prob=model_cfg["hidden_dropout_prob"],
+        ffn_dim=model_cfg["ffn_dim"],
+        activation=model_cfg["activation"],
+        device=cfg["runtime"]["device"],
+        ignore_duplicate_cols=model_cfg["ignore_duplicate_cols"],
+    )
+
+    if args.mode in {"all", "train"}:
+        logger.info("Start training...")
+        train(
+            model=model,
+            trainset=trainset,
+            valset=None,
+            num_epoch=train_cfg["max_epochs"],
+            batch_size=train_cfg["batch_size"],
+            eval_batch_size=train_cfg["eval_batch_size"],
+            lr=train_cfg["lr"],
+            weight_decay=train_cfg["weight_decay"],
+            patience=train_cfg["patience"],
+            warmup_ratio=train_cfg["warmup_ratio"],
+            warmup_steps=train_cfg["warmup_steps"],
+            eval_metric=train_cfg["eval_metric"],
+            output_dir=str(checkpoint_dir),
+            collate_fn=collate_fn,
+            num_workers=train_cfg["num_workers"],
+            ignore_duplicate_cols=model_cfg["ignore_duplicate_cols"],
+            eval_less_is_better=train_cfg["eval_less_is_better"],
+        )
+        logger.info("Training finished.")
+
+    if wb_run is not None:
+        wandb.finish()
+
+
+if __name__ == "__main__":
+    main()

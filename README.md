@@ -44,6 +44,12 @@ python -m src.rapacl.prepare_tabular \
   --config configs/data/prepare_tabular.yaml 
 ```
 
+(ii) pretrain  
+```bash
+python -m src.rapacl.pretrain_transtab \
+  --config configs/pretrain_transtab/idc_tenx99.yaml \
+  --mode train
+```
 
 ---
 
