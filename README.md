@@ -31,6 +31,20 @@ python -m src.data.extract_genes --config configs/data/extract_genes.yaml
 
 ... 
 
+### Pretrain Radiomics TransTab 
+
+```bash
+cd RaPaCL/
+```
+
+(i) prepare tabular custom data 
+- from H5 (HEST-style)
+```bash
+python -m src.rapacl.prepare_tabular \
+  --config configs/data/prepare_tabular.yaml 
+```
+
+
 ---
 
 ## Baselines
