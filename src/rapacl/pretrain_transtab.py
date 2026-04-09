@@ -11,6 +11,7 @@ from src.common.config import load_yaml, parse_common_args, apply_cli_overrides
 from src.common.logger import setup_logger
 from src.common.utils import ensure_dir, save_yaml, seed_everything
 
+import transtab
 from transtab import constants
 from transtab.modeling_transtab import TransTabForCL
 from transtab.trainer import Trainer
@@ -299,22 +300,30 @@ def main() -> None:
     model_cfg = cfg["model"]
     train_cfg = cfg["train"]
 
-    model, collate_fn = build_contrastive_learner(
-        categorical_columns=categorical_columns,
-        numerical_columns=numerical_columns,
-        binary_columns=binary_columns,
-        projection_dim=model_cfg["projection_dim"],
+    # model, collate_fn = build_contrastive_learner(
+    #     categorical_columns=categorical_columns,
+    #     numerical_columns=numerical_columns,
+    #     binary_columns=binary_columns,
+    #     projection_dim=model_cfg["projection_dim"],
+    #     num_partition=model_cfg["num_partition"],
+    #     overlap_ratio=model_cfg["overlap_ratio"],
+    #     supervised=model_cfg["supervised"],
+    #     hidden_dim=model_cfg["hidden_dim"],
+    #     num_layer=model_cfg["num_layer"],
+    #     num_attention_head=model_cfg["num_attention_head"],
+    #     hidden_dropout_prob=model_cfg["hidden_dropout_prob"],
+    #     ffn_dim=model_cfg["ffn_dim"],
+    #     activation=model_cfg["activation"],
+    #     device=cfg["runtime"]["device"],
+    #     ignore_duplicate_cols=model_cfg["ignore_duplicate_cols"],
+    # )
+    model, collate_fn = transtab.build_contrastive_learner(
+        cat_cols=categorical_columns,
+        num_cols=numerical_columns,
+        bin_cols=binary_columns,
+        supervised=model_cfg["supervised"],
         num_partition=model_cfg["num_partition"],
         overlap_ratio=model_cfg["overlap_ratio"],
-        supervised=model_cfg["supervised"],
-        hidden_dim=model_cfg["hidden_dim"],
-        num_layer=model_cfg["num_layer"],
-        num_attention_head=model_cfg["num_attention_head"],
-        hidden_dropout_prob=model_cfg["hidden_dropout_prob"],
-        ffn_dim=model_cfg["ffn_dim"],
-        activation=model_cfg["activation"],
-        device=cfg["runtime"]["device"],
-        ignore_duplicate_cols=model_cfg["ignore_duplicate_cols"],
     )
 
     if args.mode in {"all", "train"}:
