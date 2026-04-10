@@ -472,8 +472,16 @@ def train(model,
     load_best_at_last=True,
     ignore_duplicate_cols=False,
     eval_less_is_better=False,
+    ### added: distributed setting 
+    distributed=False,
+    local_rank=0,
+    rank=0,
+    world_size=1,
+    device=None,
+    ### 
     **kwargs,
     ):
+
     '''
     The shared train function for all TransTabModel based models.
 
@@ -549,18 +557,24 @@ def train(model,
         'batch_size': batch_size,
         'eval_batch_size': eval_batch_size,
         'lr': lr,
-        'weight_decay':weight_decay,
-        'patience':patience,
-        'warmup_ratio':warmup_ratio,
-        'warmup_steps':warmup_steps,
-        'eval_metric':eval_metric,
-        'output_dir':output_dir,
-        'collate_fn':collate_fn,
-        'num_workers':num_workers,
-        'balance_sample':balance_sample,
-        'load_best_at_last':load_best_at_last,
-        'ignore_duplicate_cols':ignore_duplicate_cols,
-        'eval_less_is_better':eval_less_is_better,
+        'weight_decay': weight_decay,
+        'patience': patience,
+        'warmup_ratio': warmup_ratio,
+        'warmup_steps': warmup_steps,
+        'eval_metric': eval_metric,
+        'output_dir': output_dir,
+        'collate_fn': collate_fn,
+        'num_workers': num_workers,
+        'balance_sample': balance_sample,
+        'load_best_at_last': load_best_at_last,
+        'ignore_duplicate_cols': ignore_duplicate_cols,
+        'eval_less_is_better': eval_less_is_better,
+        ### distributed settings 
+        'distributed': distributed,
+        'local_rank': local_rank,
+        'rank': rank,
+        'world_size': world_size,
+        'device': device,
     }
     trainer = Trainer(
         model,
