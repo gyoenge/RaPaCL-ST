@@ -11,8 +11,11 @@ paths:
   log_dir: /root/workspace/RaPaCL/outputs/rapacl/IDC_ALLXENIUM/logs
   checkpoint_dir: /root/workspace/RaPaCL/outputs/rapacl/IDC_ALLXENIUM/checkpoints
 
+# runtime:
+#   device: cuda:0
 runtime:
-  device: cuda:0
+  device: cuda
+  distributed: true
 
 train:
   batch_size: 32
@@ -60,7 +63,6 @@ wandb:
 
 
 # python -m src.rapacl.pretrain_transtab --config configs/pretrain_transtab/idc_allxenium.yaml --mode train
-
 
 
 paths:
