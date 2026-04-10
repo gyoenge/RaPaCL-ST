@@ -17,10 +17,10 @@ from transtab.modeling_transtab import TransTabForCL
 from transtab.trainer import Trainer
 from transtab.trainer_utils import TransTabCollatorForCL
 
-try:
-    import wandb
-except ImportError:
-    wandb = None
+# try:
+#     import wandb
+# except ImportError:
+#     wandb = None
 
 
 def read_feature_list(txt_path: str | Path) -> list[str]:
@@ -196,28 +196,28 @@ def _flatten_dict(d: dict[str, Any], parent_key: str = "", sep: str = ".") -> di
     return dict(items)
 
 
-def init_wandb(cfg: dict[str, Any], run_dir: Path):
-    wandb_cfg = cfg.get("wandb", {})
-    enabled = wandb_cfg.get("enabled", False)
+# def init_wandb(cfg: dict[str, Any], run_dir: Path):
+#     wandb_cfg = cfg.get("wandb", {})
+#     enabled = wandb_cfg.get("enabled", False)
 
-    if not enabled:
-        return None
+#     if not enabled:
+#         return None
 
-    if wandb is None:
-        raise ImportError("wandb is not installed. Please `pip install wandb`.")
+#     if wandb is None:
+#         raise ImportError("wandb is not installed. Please `pip install wandb`.")
 
-    run = wandb.init(
-        project=wandb_cfg.get("project", cfg["experiment"].get("project_name", "default-project")),
-        entity=wandb_cfg.get("entity"),
-        name=wandb_cfg.get("run_name") or cfg["experiment"]["name"],
-        tags=wandb_cfg.get("tags"),
-        notes=wandb_cfg.get("notes"),
-        config=_flatten_dict(cfg),
-        dir=str(run_dir),
-    )
+#     run = wandb.init(
+#         project=wandb_cfg.get("project", cfg["experiment"].get("project_name", "default-project")),
+#         entity=wandb_cfg.get("entity"),
+#         name=wandb_cfg.get("run_name") or cfg["experiment"]["name"],
+#         tags=wandb_cfg.get("tags"),
+#         notes=wandb_cfg.get("notes"),
+#         config=_flatten_dict(cfg),
+#         dir=str(run_dir),
+#     )
 
-    wandb.save(str(run_dir / "config_final.yaml"))
-    return run
+#     wandb.save(str(run_dir / "config_final.yaml"))
+#     return run
 
 
 def save_column_info(
@@ -267,35 +267,47 @@ def main() -> None:
         logger.info("Final config saved to: %s", run_dir / "config_final.yaml")
 
     logger.info("Preparing custom TransTab dataset from: %s", cfg["paths"]["data_root"])
-    trainset, categorical_columns, numerical_columns, binary_columns = load_custom_transtab_dataset(
-        data_root=cfg["paths"]["data_root"],
-        data_csv=cfg["data"]["data_csv"],
-        numerical_feature_file=cfg["data"]["numerical_feature_file"],
-        binary_feature_file=cfg["data"].get("binary_feature_file"),
-        target_col=cfg["data"]["target_col"],
-    )
 
+    # trainset, categorical_columns, numerical_columns, binary_columns = load_custom_transtab_dataset(
+    #     data_root=cfg["paths"]["data_root"],
+    #     data_csv=cfg["data"]["data_csv"],
+    #     numerical_feature_file=cfg["data"]["numerical_feature_file"],
+    #     binary_feature_file=cfg["data"].get("binary_feature_file"),
+    #     target_col=cfg["data"]["target_col"],
+    # )
+    # logger.info("Detected column types:")
+    # logger.info("  categorical: %d", len(categorical_columns))
+    # logger.info("  numerical  : %d", len(numerical_columns))
+    # logger.info("  binary     : %d", len(binary_columns))
+    # save_column_info(
+    #     run_dir=run_dir,
+    #     categorical_columns=categorical_columns,
+    #     numerical_columns=numerical_columns,
+    #     binary_columns=binary_columns,
+    # )
+
+    allset, trainset, valset, testset, cat_cols, num_cols, bin_cols \
+        = transtab.load_data([f'{cfg["paths"]["data_root"]}'])
     logger.info("Detected column types:")
-    logger.info("  categorical: %d", len(categorical_columns))
-    logger.info("  numerical  : %d", len(numerical_columns))
-    logger.info("  binary     : %d", len(binary_columns))
-
+    logger.info("  categorical: %d", len(cat_cols))
+    logger.info("  numerical  : %d", len(num_cols))
+    logger.info("  binary     : %d", len(bin_cols))
     save_column_info(
         run_dir=run_dir,
-        categorical_columns=categorical_columns,
-        numerical_columns=numerical_columns,
-        binary_columns=binary_columns,
+        categorical_columns=cat_cols,
+        numerical_columns=num_cols,
+        binary_columns=bin_cols,
     )
 
-    wb_run = init_wandb(cfg, run_dir)
-    if wb_run is not None:
-        wandb.config.update(
-            {
-                "num_categorical_columns": len(categorical_columns),
-                "num_numerical_columns": len(numerical_columns),
-                "num_binary_columns": len(binary_columns),
-            }
-        )
+    # wb_run = init_wandb(cfg, run_dir)
+    # if wb_run is not None:
+    #     wandb.config.update(
+    #         {
+    #             "num_categorical_columns": len(categorical_columns),
+    #             "num_numerical_columns": len(numerical_columns),
+    #             "num_binary_columns": len(binary_columns),
+    #         }
+    #     )
 
     model_cfg = cfg["model"]
     train_cfg = cfg["train"]
@@ -317,10 +329,11 @@ def main() -> None:
     #     device=cfg["runtime"]["device"],
     #     ignore_duplicate_cols=model_cfg["ignore_duplicate_cols"],
     # )
+
     model, collate_fn = transtab.build_contrastive_learner(
-        cat_cols=categorical_columns,
-        num_cols=numerical_columns,
-        bin_cols=binary_columns,
+        cat_cols=cat_cols,
+        num_cols=num_cols,
+        bin_cols=bin_cols,
         supervised=model_cfg["supervised"],
         num_partition=model_cfg["num_partition"],
         overlap_ratio=model_cfg["overlap_ratio"],
@@ -349,8 +362,8 @@ def main() -> None:
         )
         logger.info("Training finished.")
 
-    if wb_run is not None:
-        wandb.finish()
+    # if wb_run is not None:
+    #     wandb.finish()
 
 
 if __name__ == "__main__":
