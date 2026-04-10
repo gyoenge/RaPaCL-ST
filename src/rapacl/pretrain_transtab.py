@@ -2,7 +2,7 @@ from __future__ import annotations
 """
 CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 \
   -m src.rapacl.pretrain_transtab \
-  --config configs/pretrain_transtab/idc_tenx99.yaml \
+  --config configs/pretrain_transtab/idc_allxenium.yaml \
   --mode train
 """
 
@@ -17,7 +17,8 @@ from src.common.config import load_yaml, parse_common_args, apply_cli_overrides
 from src.common.logger import setup_logger
 from src.common.utils import ensure_dir, save_yaml, seed_everything
 
-import transtab 
+from transtab.dataset import load_data
+from transtab import build_contrastive_learner, train
 
 
 def save_column_info(
@@ -71,6 +72,11 @@ def main() -> None:
 
     distributed = cfg["runtime"].get("distributed", False)
     rank, local_rank, world_size, device = setup_distributed(distributed)
+    logger.info("Distributed: %s", distributed)
+    logger.info("Rank: %s", rank)
+    logger.info("Local rank: %s", local_rank)
+    logger.info("World size: %s", world_size)
+    logger.info("Device: %s", device)
 
     seed = cfg.get("seed", 42)
     seed_everything(seed + rank)
@@ -98,7 +104,7 @@ def main() -> None:
     if is_main_process(rank):
         logger.info("Preparing custom TransTab dataset from: %s", cfg["paths"]["data_root"])
 
-    allset, trainset, valset, testset, cat_cols, num_cols, bin_cols = transtab.load_data(
+    allset, trainset, valset, testset, cat_cols, num_cols, bin_cols = load_data(
         [f'{cfg["paths"]["data_root"]}']
     )
 
@@ -118,7 +124,7 @@ def main() -> None:
     model_cfg = cfg["model"]
     train_cfg = cfg["train"]
 
-    model, collate_fn = transtab.build_contrastive_learner(
+    model, collate_fn = build_contrastive_learner(
         cat_cols=cat_cols,
         num_cols=num_cols,
         bin_cols=bin_cols,
@@ -132,7 +138,7 @@ def main() -> None:
         if is_main_process(rank):
             logger.info("Start training...")
 
-        transtab.train(
+        train(
             model=model,
             trainset=trainset,
             valset=valset,
