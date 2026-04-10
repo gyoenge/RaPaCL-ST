@@ -237,3 +237,7 @@ selected_results/*
 */generated/
 */generated/*
 */img2rad-*.yaml
+
+# generated transtab tokenizer folder
+transtab/tokenizer/
+transtab/tokenizer/* 
