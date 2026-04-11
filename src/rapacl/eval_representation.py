@@ -169,6 +169,7 @@ def run_eval_detailed(
     eval_dir = ensure_dir(run_dir / "detailed_eval")
 
     # 1) embedding extraction
+    logger.info("Extracting Embeddings...")
     embeddings, labels = extract_embeddings(
         model=model,
         dataset=allset,
@@ -179,6 +180,7 @@ def run_eval_detailed(
     logger.info("Labels shape: %s", labels.shape)
 
     # 2) clustering metrics
+    logger.info("Computin Clustering Metrics...")
     metrics, cluster_ids = compute_clustering_metrics(
         embeddings=embeddings,
         labels=labels,
@@ -192,6 +194,8 @@ def run_eval_detailed(
     save_json(metrics, eval_dir / "clustering_metrics.json")
 
     # 3) UMAP / t-SNE
+    logger.info("Saving UMAP & t-SNE plots...")
+
     z_umap = save_umap_plot(
         embeddings=embeddings,
         labels=labels,
@@ -214,6 +218,7 @@ def run_eval_detailed(
     )
 
     # 4) representative points
+    logger.info("Finding Representative Points...")
     umap_reps = find_representative_points(z_umap, labels)
     tsne_reps = find_representative_points(z_tsne, labels)
 
@@ -223,4 +228,6 @@ def run_eval_detailed(
     }
     save_json(rep_info, eval_dir / "representative_points.json")
 
+
+    logger.info("All evaluation finished!")
     logger.info("Detailed evaluation artifacts saved to: %s", eval_dir)
