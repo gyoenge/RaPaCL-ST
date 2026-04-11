@@ -1,9 +1,9 @@
 seed: 42
 
 paths:
-  radiomics_parquet_dir: /root/workspace/datasets/hest_data/bench_h5/radiomics_normed_parquets
-  output_dir: /root/workspace/datasets/hest_data/bench_h5/radiomics_normed_tabular
-  log_dir: /root/workspace/RaPaCL/logs/transtab_dataset
+  radiomics_parquet_dir: /root/workspace/datasets/hest_data/hestbench_h5/all_radiomics_normed_parquets
+  output_dir: /root/workspace/datasets/hest_data/hestbench_h5/all_radiomics_normed_tabular
+  log_dir: /root/workspace/datasets/hest_data/hestbench_h5/all_radiomics_normed_tabular/logs
 
 dataset:
   meta_columns:
