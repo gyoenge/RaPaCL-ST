@@ -11,10 +11,14 @@ python -m src.rapacl.pretrain_transtab \
   --distributed false \
   --mode eval
 """
+"""
+python -m src.rapacl.pretrain_transtab \
+  --config configs/pretrain_transtab/idc_allxenium.yaml \
+  --distributed false \
+  --mode detailed_eval
+"""
 
-import json
 import os
-from pathlib import Path
 
 import torch
 import torch.distributed as dist
@@ -29,7 +33,11 @@ from src.rapacl.transtab_custom import (
     build_classifier,
     train,
     predict,
+    # utils 
+    unwrap_dataset, 
+    save_column_info, 
 )
+from src.rapacl.eval_representation import run_eval_detailed 
 
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, classification_report
@@ -40,19 +48,6 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 import logging
 logging.getLogger().setLevel(logging.ERROR)
-
-
-def unwrap_dataset(ds):
-    """
-    TransTab load_data 결과가 (X, y) 일 수도 있고 [(X, y)] 일 수도 있어서 정리
-    """
-    if isinstance(ds, (list, tuple)) and len(ds) == 1:
-        inner = ds[0]
-        if isinstance(inner, (list, tuple)) and len(inner) == 2:
-            return inner[0], inner[1]
-    if isinstance(ds, (list, tuple)) and len(ds) == 2:
-        return ds[0], ds[1]
-    raise ValueError(f"Unexpected dataset format: type={type(ds)}, repr={repr(ds)[:300]}")
 
 
 def evaluate_classifier(model, testset, logger):
@@ -102,24 +97,6 @@ def evaluate_classifier(model, testset, logger):
             logger.warning("Failed to compute multiclass ROC-AUC: %s", e)
 
         logger.info("\n%s", classification_report(y_test, y_label, digits=4))
-
-def save_column_info(
-    run_dir: Path,
-    categorical_columns: list[str],
-    numerical_columns: list[str],
-    binary_columns: list[str],
-) -> None:
-    info = {
-        "categorical_columns": categorical_columns,
-        "numerical_columns": numerical_columns,
-        "binary_columns": binary_columns,
-        "num_categorical": len(categorical_columns),
-        "num_numerical": len(numerical_columns),
-        "num_binary": len(binary_columns),
-    }
-
-    with open(run_dir / "column_info.json", "w", encoding="utf-8") as f:
-        json.dump(info, f, indent=2, ensure_ascii=False)
 
 
 def setup_distributed(distributed: bool):
@@ -317,6 +294,34 @@ def main() -> None:
             logger.info("Start evaluating...")
             evaluate_classifier(clf, testset, logger)
 
+    # 4) detailed evaluations 
+    if args.mode == "eval_detailed":
+        if is_main_process(rank):
+            logger.info("Build encoder/classifier for detailed evaluation: %s", checkpoint_dir)
+
+            _, y_train = unwrap_dataset(trainset)
+            num_class = len(np.unique(y_train))
+
+            clf = build_classifier(
+                checkpoint=str(checkpoint_dir),
+                num_class=num_class,
+                cat_cols=cat_cols,
+                num_cols=num_cols,
+                bin_cols=bin_cols,
+            )
+
+            run_eval_detailed(
+                model=clf,
+                allset=allset,
+                trainset=trainset,
+                valset=valset,
+                testset=testset,
+                run_dir=run_dir,
+                logger=logger,
+                device=device,
+                cfg=cfg,
+            )   
+    
     cleanup_distributed(distributed)
 
 

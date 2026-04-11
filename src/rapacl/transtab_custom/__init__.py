@@ -7,3 +7,4 @@ from .modeling_transtab import *
 from .trainer import *
 from .evaluator import *
 from .constants import *
+from .utils import * 

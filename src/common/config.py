@@ -47,10 +47,8 @@ def parse_common_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--mode",
-        type=str,
-        default="eval",
-        choices=["all", "eval", "train", "tuning"],
-        help="Execution mode",
+        choices=["all", "eval", "eval_detailed", "train", "tuning"],
+        default="train",
     )
 
     # optional overrides
