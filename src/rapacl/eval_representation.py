@@ -131,8 +131,21 @@ def save_umap_plot(embeddings, labels, save_path, title="UMAP"):
 
     return z
 
-def save_tsne_plot(embeddings, labels, save_path, title="t-SNE"):
-    reducer = TSNE(n_components=2, random_state=42, init="pca", learning_rate="auto")
+def save_tsne_plot(embeddings, labels, save_path, title="t-SNE", max_samples=8000, random_state=42):
+    n = len(embeddings)
+    if n > max_samples:
+        rng = np.random.default_rng(random_state)
+        idx = rng.choice(n, size=max_samples, replace=False)
+        embeddings = embeddings[idx]
+        labels = labels[idx]
+
+    reducer = TSNE(
+        n_components=2,
+        random_state=random_state,
+        init="pca",
+        learning_rate="auto",
+        perplexity=30,
+    )
     z = reducer.fit_transform(embeddings)
 
     plt.figure(figsize=(8, 6))
@@ -144,6 +157,20 @@ def save_tsne_plot(embeddings, labels, save_path, title="t-SNE"):
     plt.close()
 
     return z
+
+# def save_tsne_plot(embeddings, labels, save_path, title="t-SNE"):
+#     reducer = TSNE(n_components=2, random_state=42, init="pca", learning_rate="auto")
+#     z = reducer.fit_transform(embeddings)
+
+#     plt.figure(figsize=(8, 6))
+#     scatter = plt.scatter(z[:, 0], z[:, 1], c=labels, s=8)
+#     plt.title(title)
+#     plt.colorbar(scatter)
+#     plt.tight_layout()
+#     plt.savefig(save_path, dpi=200)
+#     plt.close()
+
+#     return z
 
 def find_representative_points(z, labels):
     reps = {}
