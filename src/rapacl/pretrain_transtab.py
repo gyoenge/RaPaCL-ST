@@ -15,7 +15,7 @@ python -m src.rapacl.pretrain_transtab \
 python -m src.rapacl.pretrain_transtab \
   --config configs/pretrain_transtab/idc_allxenium.yaml \
   --distributed false \
-  --mode detailed_eval
+  --mode eval_detailed
 """
 
 import os
