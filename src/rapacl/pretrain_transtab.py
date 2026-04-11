@@ -23,7 +23,7 @@ from src.common.config import load_yaml, parse_common_args, apply_cli_overrides
 from src.common.logger import setup_logger
 from src.common.utils import ensure_dir, save_yaml, seed_everything
 
-from transtab_custom import (
+from src.rapacl.transtab_custom import (
     load_data, 
     build_contrastive_learner, 
     build_classifier,
@@ -33,6 +33,13 @@ from transtab_custom import (
 
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, classification_report
+
+# ignore warning logs 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+import logging
+logging.getLogger().setLevel(logging.ERROR)
 
 
 def unwrap_dataset(ds):
@@ -273,8 +280,12 @@ def main() -> None:
         if is_main_process(rank):
             logger.info("Build classifier from pretrained checkpoint: %s", checkpoint_dir)
 
+            _, y_train = unwrap_dataset(trainset)
+            num_class = len(np.unique(y_train))
+            logger.info("Building classifier with num_class=%d", num_class)
             clf = build_classifier(
                 checkpoint=str(checkpoint_dir),
+                num_class=num_class,
                 cat_cols=cat_cols,
                 num_cols=num_cols,
                 bin_cols=bin_cols,
@@ -302,6 +313,9 @@ def main() -> None:
             # best ckpt reload
             clf.load(str(run_dir / "classifier_ckpt"))
 
+            # 
+            logger.info("Prediction shape: %s", testset.shape)
+            logger.info("Start evaluating...")
             evaluate_classifier(clf, testset, logger)
 
     cleanup_distributed(distributed)

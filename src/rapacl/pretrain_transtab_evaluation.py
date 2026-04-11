@@ -39,10 +39,10 @@ try:
 except ImportError:  # pragma: no cover
     umap = None
 
-import transtab
-from transtab import constants
-from transtab.modeling_transtab import TransTabForCL
-from transtab.trainer_utils import TransTabCollatorForCL
+import src.rapacl.transtab_custom
+from src.rapacl.transtab_custom import constants
+from src.rapacl.transtab_custom.modeling_transtab import TransTabForCL
+from src.rapacl.transtab_custom.trainer_utils import TransTabCollatorForCL
 
 from src.common.config import apply_cli_overrides, load_yaml, parse_common_args
 from src.common.logger import setup_logger
@@ -684,7 +684,7 @@ def main() -> None:
     logger.info("Execution mode: %s", args.mode)
     logger.info("Preparing dataset from: %s", cfg["paths"]["data_root"])
 
-    allset, trainset, valset, testset, cat_cols, num_cols, bin_cols = transtab.load_data([
+    allset, trainset, valset, testset, cat_cols, num_cols, bin_cols = transtab_custom.load_data([
         f'{cfg["paths"]["data_root"]}'
     ])
 
@@ -729,7 +729,7 @@ def main() -> None:
     except Exception as e:
         logger.warning("Robust loader failed, fallback to transtab builder. Error: %s", e)
 
-        model, collate_fn = transtab.build_contrastive_learner(
+        model, collate_fn = transtab_custom.build_contrastive_learner(
             cat_cols=cat_cols,
             num_cols=num_cols,
             bin_cols=bin_cols,

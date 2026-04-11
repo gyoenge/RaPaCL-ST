@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from sklearn.metrics import roc_auc_score, accuracy_score, mean_squared_error
 
-from transtab import constants
+from src.rapacl.transtab_custom import constants
 
 def predict(clf, 
     x_test,

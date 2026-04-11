@@ -22,12 +22,12 @@ import numpy as np
 import pandas as pd
 from tqdm.autonotebook import trange
 
-from transtab import constants
-from transtab.evaluator import predict, get_eval_metric_fn, EarlyStopping
-from transtab.modeling_transtab import TransTabFeatureExtractor
-from transtab.trainer_utils import SupervisedTrainCollator, TrainDataset
-from transtab.trainer_utils import get_parameter_names
-from transtab.trainer_utils import get_scheduler
+from src.rapacl.transtab_custom import constants
+from src.rapacl.transtab_custom.evaluator import predict, get_eval_metric_fn, EarlyStopping
+from src.rapacl.transtab_custom.modeling_transtab import TransTabFeatureExtractor
+from src.rapacl.transtab_custom.trainer_utils import SupervisedTrainCollator, TrainDataset
+from src.rapacl.transtab_custom.trainer_utils import get_parameter_names
+from src.rapacl.transtab_custom.trainer_utils import get_scheduler
 
 import logging
 logger = logging.getLogger(__name__)
