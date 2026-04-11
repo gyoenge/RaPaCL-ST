@@ -23,8 +23,78 @@ from src.common.config import load_yaml, parse_common_args, apply_cli_overrides
 from src.common.logger import setup_logger
 from src.common.utils import ensure_dir, save_yaml, seed_everything
 
-from transtab import load_data, build_contrastive_learner, train
+from transtab import (
+    load_data, 
+    build_contrastive_learner, 
+    build_classifier,
+    train,
+    predict,
+)
 
+import numpy as np
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, classification_report
+
+
+def unwrap_dataset(ds):
+    """
+    TransTab load_data 결과가 (X, y) 일 수도 있고 [(X, y)] 일 수도 있어서 정리
+    """
+    if isinstance(ds, (list, tuple)) and len(ds) == 1:
+        inner = ds[0]
+        if isinstance(inner, (list, tuple)) and len(inner) == 2:
+            return inner[0], inner[1]
+    if isinstance(ds, (list, tuple)) and len(ds) == 2:
+        return ds[0], ds[1]
+    raise ValueError(f"Unexpected dataset format: type={type(ds)}, repr={repr(ds)[:300]}")
+
+
+def evaluate_classifier(model, testset, logger):
+    x_test, y_test = unwrap_dataset(testset)
+
+    y_pred = predict(model, x_test)
+    y_pred = np.asarray(y_pred)
+
+    logger.info("Prediction shape: %s", y_pred.shape)
+
+    # binary classification
+    if y_pred.ndim == 1 or (y_pred.ndim == 2 and y_pred.shape[1] == 1):
+        y_score = y_pred.reshape(-1)
+        y_label = (y_score >= 0.5).astype(int)
+
+        acc = accuracy_score(y_test, y_label)
+        f1 = f1_score(y_test, y_label)
+        try:
+            auc = roc_auc_score(y_test, y_score)
+        except Exception as e:
+            auc = None
+            logger.warning("Failed to compute ROC-AUC: %s", e)
+
+        logger.info("=== Test Classification Metrics ===")
+        logger.info("Test Accuracy: %.6f", acc)
+        logger.info("Test F1      : %.6f", f1)
+        if auc is not None:
+            logger.info("Test AUROC   : %.6f", auc)
+
+        logger.info("\n%s", classification_report(y_test, y_label, digits=4))
+
+    # multiclass classification
+    else:
+        y_label = np.argmax(y_pred, axis=1)
+
+        acc = accuracy_score(y_test, y_label)
+        f1_macro = f1_score(y_test, y_label, average="macro")
+
+        logger.info("=== Test Classification Metrics ===")
+        logger.info("Test Accuracy : %.6f", acc)
+        logger.info("Test F1-macro : %.6f", f1_macro)
+
+        try:
+            auc_macro_ovr = roc_auc_score(y_test, y_pred, multi_class="ovr", average="macro")
+            logger.info("Test AUROC(ovr, macro): %.6f", auc_macro_ovr)
+        except Exception as e:
+            logger.warning("Failed to compute multiclass ROC-AUC: %s", e)
+
+        logger.info("\n%s", classification_report(y_test, y_label, digits=4))
 
 def save_column_info(
     run_dir: Path,
@@ -154,6 +224,7 @@ def main() -> None:
     model_cfg = cfg["model"]
     train_cfg = cfg["train"]
 
+    # 1) contrastive pretraining model
     model, collate_fn = build_contrastive_learner(
         cat_cols=cat_cols,
         num_cols=num_cols,
@@ -164,6 +235,7 @@ def main() -> None:
         device=device,
     )
 
+    # 2) pretraining
     if args.mode in {"all", "train"}:
         if is_main_process(rank):
             logger.info("Start training...")
@@ -195,6 +267,42 @@ def main() -> None:
 
         if is_main_process(rank):
             logger.info("Training finished.")
+
+    # 3) finetune classifier + evaluate on testset
+    if args.mode in {"all", "eval"}:
+        if is_main_process(rank):
+            logger.info("Build classifier from pretrained checkpoint: %s", checkpoint_dir)
+
+            clf = build_classifier(
+                checkpoint=str(checkpoint_dir),
+                cat_cols=cat_cols,
+                num_cols=num_cols,
+                bin_cols=bin_cols,
+            )
+            logger.info("Start classifier finetuning...")
+
+            train(
+                clf,
+                trainset,
+                valset,
+                num_epoch=train_cfg.get("ft_max_epochs", 20),
+                batch_size=train_cfg["batch_size"],
+                eval_batch_size=train_cfg["eval_batch_size"],
+                lr=train_cfg.get("ft_lr", 1e-4),
+                weight_decay=train_cfg["weight_decay"],
+                patience=train_cfg["patience"],
+                eval_metric=train_cfg.get("ft_eval_metric", "auc"),
+                eval_less_is_better=False,
+                output_dir=str(run_dir / "classifier_ckpt"),
+                num_workers=train_cfg["num_workers"],
+            )
+
+            logger.info("Classifier finetuning finished.")
+
+            # best ckpt reload
+            clf.load(str(run_dir / "classifier_ckpt"))
+
+            evaluate_classifier(clf, testset, logger)
 
     cleanup_distributed(distributed)
 

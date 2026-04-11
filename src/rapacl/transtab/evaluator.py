@@ -108,11 +108,26 @@ def get_eval_metric_fn(eval_metric):
     return fn_dict[eval_metric]
 
 def acc_fn(y, p):
-    y_p = np.argmax(p, -1)
+    p = np.asarray(p)
+
+    if p.ndim == 1 or (p.ndim == 2 and p.shape[1] == 1):
+        y_p = (p.reshape(-1) >= 0.5).astype(int)
+    else:
+        y_p = np.argmax(p, axis=-1)
+
     return accuracy_score(y, y_p)
 
 def auc_fn(y, p):
-    return roc_auc_score(y, p)
+    y = np.asarray(y)
+    p = np.asarray(p)
+
+    # binary classification
+    if p.ndim == 1 or (p.ndim == 2 and p.shape[1] == 1):
+        p = p.reshape(-1)
+        return roc_auc_score(y, p)
+
+    # multi-class classification
+    return roc_auc_score(y, p, multi_class="ovr", average="macro")
 
 def mse_fn(y, p):
     return mean_squared_error(y, p)
