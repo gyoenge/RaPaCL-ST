@@ -314,7 +314,6 @@ def main() -> None:
             clf.load(str(run_dir / "classifier_ckpt"))
 
             # 
-            logger.info("Prediction shape: %s", testset.shape)
             logger.info("Start evaluating...")
             evaluate_classifier(clf, testset, logger)
 
