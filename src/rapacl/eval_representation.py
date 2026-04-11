@@ -218,11 +218,11 @@ def run_eval_detailed(
     logger.info("Labels shape: %s", labels.shape)
 
     # 2) clustering metrics
-    logger.info("Computin Clustering Metrics...")
+    logger.info("Computing Clustering Metrics...")
     metrics, cluster_ids = compute_clustering_metrics(
         embeddings=embeddings,
         labels=labels,
-        num_class=num_class,
+        num_classes=num_class,
     )
 
     logger.info("Silhouette: %.6f", metrics["silhouette"])
