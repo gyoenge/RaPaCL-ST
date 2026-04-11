@@ -64,7 +64,7 @@ def extract_embeddings(model, dataset, batch_size=256, logger=None):
                 # use CLS token embedding only
                 emb = outputs["embedding"]   # (B, L, D)
                 if logger is not None and i == 0:
-                    logger.info("embedding shape: %s", tuple(emb.shape))
+                    logger.info("embedding shape: %sㄴ", tuple(emb.shape))
                 emb = emb[:, 0, :]           # (B, D)
 
             elif isinstance(outputs, tuple):
@@ -281,6 +281,13 @@ def run_eval_detailed(
 
     logger.info("Embedding shape: %s", embeddings.shape)
     logger.info("Labels shape: %s", labels.shape)
+
+    logger.info("------ Check embedding collapse ------")
+    logger.info("Embedding mean abs: %.8f", float(np.mean(np.abs(embeddings))))
+    logger.info("Embedding std mean: %.8f", float(np.mean(np.std(embeddings, axis=0))))
+    logger.info("Embedding global std: %.8f", float(np.std(embeddings)))
+    logger.info("Unique rows (sampled): %d", np.unique(embeddings[:5000], axis=0).shape[0])
+    logger.info("--------------------------------------")
 
     # 2) clustering metrics
     logger.info("Computing Clustering Metrics...")
