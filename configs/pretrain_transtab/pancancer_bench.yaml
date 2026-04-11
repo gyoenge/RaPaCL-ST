@@ -6,10 +6,10 @@ experiment:
   save_config: true
 
 paths:
-  data_root: /root/workspace/datasets/prepared_tabular/PANCENCER_BENCH
-  output_root: /root/workspace/RaPaCL/outputs/rapacl/PANCENCER_BENCH
-  log_dir: /root/workspace/RaPaCL/outputs/rapacl/PANCENCER_BENCH/logs
-  checkpoint_dir: /root/workspace/RaPaCL/outputs/rapacl/PANCENCER_BENCH/checkpoints
+  data_root: /root/workspace/datasets/prepared_tabular/PANCANCER_BENCH
+  output_root: /root/workspace/RaPaCL/outputs/rapacl/PANCANCER_BENCH
+  log_dir: /root/workspace/RaPaCL/outputs/rapacl/PANCANCER_BENCH/logs
+  checkpoint_dir: /root/workspace/RaPaCL/outputs/rapacl/PANCANCER_BENCH/checkpoints
 
 # runtime:
 #   device: cuda:0
