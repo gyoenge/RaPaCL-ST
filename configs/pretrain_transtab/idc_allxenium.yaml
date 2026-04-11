@@ -24,7 +24,7 @@ train:
   num_workers: 4
   optimizer_name: adamw
   weight_decay: 0.0
-  patience: 5
+  patience: 5 # 50 
   eval_batch_size: 256
   warmup_ratio: null
   warmup_steps: null
@@ -43,7 +43,7 @@ model:
   projection_dim: 128
   num_partition: 3
   overlap_ratio: 0.5
-  supervised: false ### 
+  supervised: true ### 
   ignore_duplicate_cols: true
 
 data:
