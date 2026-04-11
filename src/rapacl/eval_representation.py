@@ -2,22 +2,16 @@
 Expected Results: 
 
 detailed_eval/
-  metrics.json
+  clustering_metrics.json
   umap_labels.png
   tsne_labels.png
   umap_kmeans.png
   representative_points.json
-  representative_patches/
-    class_0_center.png
-    class_1_center.png
+  top_variance_feature_quantiles.json
+  top_variance_feature_umap/
+    original_ngtdm_coarseness_umap_quantiles.png
+    original_glszm_largearealowgraylevelemphasis_umap_quantiles.png
     ...
-  radiomics_feature_sections/
-    ngtdm_coarseness/
-      q0_10.png
-      q10_25.png
-      ...
-    glszm_largearealowgraylevelemphasis/
-      ...
 """
 
 import json
@@ -182,6 +176,73 @@ def save_json(data, path):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
+
+"""
+추가 기능: 
+    x_all에서 분산이 큰 column top 5 선택
+    각 column에 대해 25%, 50%, 75% quantile 값에 가장 가까운 샘플 찾기
+    그 샘플들의 UMAP 좌표를 강조 표시
+    feature별로 그림 저장
+즉, “label cluster”가 아니라 “radiomics feature 값 기준 representative point”를 UMAP 위에 올리는 것. 
+
+각 feature마다:
+    전체 embedding point는 연한 회색으로 찍고
+    25% 지점 샘플은 빨간색
+    50% 지점 샘플은 초록색
+    75% 지점 샘플은 파란색
+이렇게 표시 
+"""
+
+def get_top_variance_features(x_df, top_k=5):
+    variances = x_df.var(axis=0).sort_values(ascending=False)
+    return variances.head(top_k)
+
+
+def find_nearest_quantile_indices(x_df, feature_name, quantiles=(0.25, 0.5, 0.75)):
+    values = x_df[feature_name].to_numpy()
+    q_values = np.quantile(values, quantiles)
+
+    result = {}
+    for q, qv in zip(quantiles, q_values):
+        idx = int(np.argmin(np.abs(values - qv)))
+        result[str(q)] = {
+            "index": idx,
+            "quantile_value": float(qv),
+            "actual_value": float(values[idx]),
+        }
+    return result
+
+
+def save_feature_quantile_umap_plot(z_umap, x_df, feature_name, quantile_info, save_path):
+    plt.figure(figsize=(8, 6))
+
+    # background points
+    plt.scatter(z_umap[:, 0], z_umap[:, 1], s=5, alpha=0.15)
+
+    color_map = {
+        "0.25": "red",
+        "0.5": "green",
+        "0.75": "blue",
+    }
+
+    for q_str, info in quantile_info.items():
+        idx = info["index"]
+        plt.scatter(
+            z_umap[idx, 0],
+            z_umap[idx, 1],
+            s=120,
+            c=color_map[q_str],
+            label=f"{feature_name} q={q_str} (value={info['actual_value']:.4f})",
+            edgecolors="black",
+        )
+
+    plt.title(f"UMAP representatives for {feature_name}")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=200)
+    plt.close()
+
+
 def run_eval_detailed(
     model,
     allset,
@@ -265,6 +326,36 @@ def run_eval_detailed(
         "tsne_representatives": tsne_reps,
     }
     save_json(rep_info, eval_dir / "representative_points.json")
+
+    # 5) top-variance radiomics features on UMAP
+    logger.info("Visualizing top-variance feature representatives on UMAP...")
+
+    top_var_features = get_top_variance_features(x_all, top_k=5)
+    top_var_dir = ensure_dir(eval_dir / "top_variance_feature_umap")
+
+    top_var_summary = {}
+
+    for feature_name, var_value in top_var_features.items():
+        quantile_info = find_nearest_quantile_indices(
+            x_df=x_all,
+            feature_name=feature_name,
+            quantiles=(0.25, 0.5, 0.75),
+        )
+
+        save_feature_quantile_umap_plot(
+            z_umap=z_umap,
+            x_df=x_all,
+            feature_name=feature_name,
+            quantile_info=quantile_info,
+            save_path=top_var_dir / f"{feature_name}_umap_quantiles.png",
+        )
+
+        top_var_summary[feature_name] = {
+            "variance": float(var_value),
+            "quantiles": quantile_info,
+        }
+
+    save_json(top_var_summary, eval_dir / "top_variance_feature_quantiles.json")
 
 
     logger.info("All evaluation finished!")
