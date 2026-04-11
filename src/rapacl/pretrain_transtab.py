@@ -71,28 +71,25 @@ def main() -> None:
 
     distributed = cfg["runtime"].get("distributed", False)
     rank, local_rank, world_size, device = setup_distributed(distributed)
-    logger.info("Distributed: %s", distributed)
-    logger.info("Rank: %s", rank)
-    logger.info("Local rank: %s", local_rank)
-    logger.info("World size: %s", world_size)
-    logger.info("Device: %s", device)
 
     seed = cfg.get("seed", 42)
     seed_everything(seed + rank)
 
-    log_dir = cfg["paths"]["log_dir"]
+    output_root = ensure_dir(cfg["paths"]["output_root"])
+    log_dir = ensure_dir(cfg["paths"].get("log_dir", output_root / "logs"))
     timestamp, logger = setup_logger(log_dir, name=f"pretrain_transtab_rank{rank}")
 
     if is_main_process(rank):
         logger.info("Loaded config from: %s", args.config)
         logger.info("Execution mode: %s", args.mode)
         logger.info("Distributed: %s", distributed)
-        logger.info("Device: %s", device)
+        logger.info("Rank: %s", rank)
+        logger.info("Local rank: %s", local_rank)
         logger.info("World size: %s", world_size)
+        logger.info("Device: %s", device)
         logger.info("Batch size: %s", cfg["train"].get("batch_size"))
         logger.info("Learning rate: %s", cfg["train"].get("lr"))
 
-    output_root = ensure_dir(cfg["paths"]["output_root"])
     run_dir = ensure_dir(output_root / f"run_{timestamp}")
     checkpoint_dir = ensure_dir(cfg["paths"]["checkpoint_dir"])
 
