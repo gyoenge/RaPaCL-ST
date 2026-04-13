@@ -1,15 +1,15 @@
 import pdb
 import os
 
-from src.rapacl.transtab_custom import constants
-from src.rapacl.transtab_custom.modeling_transtab import TransTabClassifier, TransTabRegressor, TransTabFeatureExtractor, TransTabFeatureProcessor
-from src.rapacl.transtab_custom.modeling_transtab import TransTabForCL
-from src.rapacl.transtab_custom.modeling_transtab import TransTabInputEncoder, TransTabModel
-from src.rapacl.transtab_custom.dataset import load_data
-from src.rapacl.transtab_custom.evaluator import predict, evaluate
-from src.rapacl.transtab_custom.trainer import Trainer
-from src.rapacl.transtab_custom.trainer_utils import TransTabCollatorForCL
-from src.rapacl.transtab_custom.trainer_utils import random_seed
+from RaPaCL.src.pretrain_transtab.transtab_custom import constants
+from RaPaCL.src.pretrain_transtab.transtab_custom.modeling_transtab import TransTabClassifier, TransTabRegressor, TransTabFeatureExtractor, TransTabFeatureProcessor
+from RaPaCL.src.pretrain_transtab.transtab_custom.modeling_transtab import TransTabForCL
+from RaPaCL.src.pretrain_transtab.transtab_custom.modeling_transtab import TransTabInputEncoder, TransTabModel
+from RaPaCL.src.pretrain_transtab.transtab_custom.dataset import load_data
+from RaPaCL.src.pretrain_transtab.transtab_custom.evaluator import predict, evaluate
+from RaPaCL.src.pretrain_transtab.transtab_custom.trainer import Trainer
+from RaPaCL.src.pretrain_transtab.transtab_custom.trainer_utils import TransTabCollatorForCL
+from RaPaCL.src.pretrain_transtab.transtab_custom.trainer_utils import random_seed
 
 def build_classifier(
     categorical_columns=None,

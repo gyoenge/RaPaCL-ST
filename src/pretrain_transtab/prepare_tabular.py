@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from src.rapacl.transtab_custom.dataset import load_single_data
+from RaPaCL.src.pretrain_transtab.transtab_custom.dataset import load_single_data
 
 from src.common.config import load_yaml
 from src.common.logger import setup_logger

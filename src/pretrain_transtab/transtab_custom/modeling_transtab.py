@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import numpy as np
 import pandas as pd
 
-from transtab import constants
+from RaPaCL.src.pretrain_transtab.transtab_custom.transtab import constants
 
 import logging
 logger = logging.getLogger(__name__)
