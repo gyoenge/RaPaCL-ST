@@ -29,20 +29,11 @@ def extract_projection_embeddings(model, dataset, batch_size=256, logger=None):
         bs_y = y.iloc[i:i + batch_size]
 
         with torch.no_grad():
-            # 1) tokenize + input embedding
-            inputs = model.input_encoder(bs_x)          # dict with embedding, attention_mask
-
-            # 2) add CLS
+            inputs = model.input_encoder(bs_x)
             inputs = model.cls_token(**inputs)
-
-            # 3) transformer encoder
-            enc = model.encoder(**inputs)               # (B, L+1, D)
-
-            # 4) take CLS
-            cls = enc[:, 0, :]                          # (B, D)
-
-            # 5) projection space
-            proj = model.projection_head(cls)           # (B, projection_dim)
+            enc = model.encoder(**inputs)
+            cls = enc[:, 0, :]
+            proj = model.projection_head(cls)
 
             if logger is not None and i == 0:
                 logger.info("encoder output shape: %s", tuple(enc.shape))
@@ -57,6 +48,13 @@ def extract_projection_embeddings(model, dataset, batch_size=256, logger=None):
     proj_all = np.concatenate(proj_list, axis=0)
     y_all = np.concatenate(y_list, axis=0)
     return proj_all, y_all
+
+
+def extract_raw_radiomics_features(dataset):
+    x, y = unwrap_dataset(dataset)
+    x_np = x.to_numpy(dtype=np.float32)
+    y_np = y.to_numpy()
+    return x, x_np, y_np
 
 
 def compute_clustering_metrics(embeddings, labels, num_classes):
@@ -180,6 +178,94 @@ def save_feature_quantile_umap_plot(z_umap, feature_name, quantile_info, save_pa
     plt.close()
 
 
+def run_space_evaluation(
+    space_name,
+    embeddings,
+    labels,
+    x_df,
+    save_dir,
+    logger,
+    num_class,
+):
+    logger.info("===== [%s] evaluation start =====", space_name)
+    logger.info("[%s] shape: %s", space_name, embeddings.shape)
+
+    logger.info("------ [%s] collapse check ------", space_name)
+    logger.info("[%s] mean abs   : %.8f", space_name, float(np.mean(np.abs(embeddings))))
+    logger.info("[%s] std mean   : %.8f", space_name, float(np.mean(np.std(embeddings, axis=0))))
+    logger.info("[%s] global std : %.8f", space_name, float(np.std(embeddings)))
+    logger.info("[%s] unique rows(sampled): %d", space_name, np.unique(embeddings[:5000], axis=0).shape[0])
+    logger.info("----------------------------------")
+
+    metrics, cluster_ids = compute_clustering_metrics(
+        embeddings=embeddings,
+        labels=labels,
+        num_classes=num_class,
+    )
+    save_json(metrics, save_dir / "clustering_metrics.json")
+
+    logger.info("[%s] Silhouette: %.6f", space_name, metrics["silhouette"])
+    logger.info("[%s] NMI       : %.6f", space_name, metrics["nmi"])
+    logger.info("[%s] ARI       : %.6f", space_name, metrics["ari"])
+
+    z_umap = save_umap_plot(
+        embeddings=embeddings,
+        labels=labels,
+        save_path=save_dir / "umap_labels.png",
+        title=f"UMAP of {space_name}",
+    )
+
+    save_umap_plot(
+        embeddings=embeddings,
+        labels=cluster_ids,
+        save_path=save_dir / "umap_kmeans.png",
+        title=f"UMAP of {space_name} with KMeans cluster ids",
+    )
+
+    z_tsne, labels_tsne, tsne_indices = save_tsne_plot(
+        embeddings=embeddings,
+        labels=labels,
+        save_path=save_dir / "tsne_labels.png",
+        title=f"t-SNE of {space_name}",
+    )
+
+    umap_reps = find_representative_points(z_umap, labels)
+    tsne_reps_local = find_representative_points(z_tsne, labels_tsne)
+    tsne_reps = {k: int(tsne_indices[v]) for k, v in tsne_reps_local.items()}
+
+    rep_info = {
+        "umap_representatives": umap_reps,
+        "tsne_representatives": tsne_reps,
+    }
+    save_json(rep_info, save_dir / "representative_points.json")
+
+    top_var_features = get_top_variance_features(x_df, top_k=5)
+    top_var_dir = ensure_dir(save_dir / "top_variance_feature_umap")
+    top_var_summary = {}
+
+    for feature_name, var_value in top_var_features.items():
+        quantile_info = find_nearest_quantile_indices(
+            x_df=x_df,
+            feature_name=feature_name,
+            quantiles=(0.25, 0.5, 0.75),
+        )
+
+        save_feature_quantile_umap_plot(
+            z_umap=z_umap,
+            feature_name=feature_name,
+            quantile_info=quantile_info,
+            save_path=top_var_dir / f"{feature_name}_umap_quantiles.png",
+        )
+
+        top_var_summary[feature_name] = {
+            "variance": float(var_value),
+            "quantiles": quantile_info,
+        }
+
+    save_json(top_var_summary, save_dir / "top_variance_feature_quantiles.json")
+    logger.info("===== [%s] evaluation done: %s =====", space_name, save_dir)
+
+
 def run_eval_detailed(
     model,
     allset,
@@ -203,105 +289,42 @@ def run_eval_detailed(
 
     eval_dir = ensure_dir(run_dir / "detailed_eval")
 
-    # 1) projection embedding extraction
+    # 1) projection embeddings
     logger.info("Extracting projection embeddings...")
-    embeddings, labels = extract_projection_embeddings(
+    proj_embeddings, proj_labels = extract_projection_embeddings(
         model=model,
         dataset=allset,
         logger=logger,
         batch_size=train_cfg.get("eval_batch_size", 256),
     )
 
-    logger.info("Embedding shape: %s", embeddings.shape)
-    logger.info("Labels shape: %s", labels.shape)
-
-    logger.info("------ Check embedding collapse ------")
-    logger.info("Embedding mean abs: %.8f", float(np.mean(np.abs(embeddings))))
-    logger.info("Embedding std mean: %.8f", float(np.mean(np.std(embeddings, axis=0))))
-    logger.info("Embedding global std: %.8f", float(np.std(embeddings)))
-    logger.info("Unique rows (sampled): %d", np.unique(embeddings[:5000], axis=0).shape[0])
-    logger.info("--------------------------------------")
-
-    # 2) clustering metrics
-    logger.info("Computing clustering metrics...")
-    metrics, cluster_ids = compute_clustering_metrics(
-        embeddings=embeddings,
-        labels=labels,
-        num_classes=num_class,
+    run_space_evaluation(
+        space_name="projection space",
+        embeddings=proj_embeddings,
+        labels=proj_labels,
+        x_df=x_all,
+        save_dir=eval_dir,
+        logger=logger,
+        num_class=num_class,
     )
 
-    logger.info("Silhouette: %.6f", metrics["silhouette"])
-    logger.info("NMI       : %.6f", metrics["nmi"])
-    logger.info("ARI       : %.6f", metrics["ari"])
+    # 2) raw radiomics
+    logger.info("Extracting raw radiomics features...")
+    x_raw_df, raw_embeddings, raw_labels = extract_raw_radiomics_features(allset)
 
-    save_json(metrics, eval_dir / "clustering_metrics.json")
+    raw_eval_dir = ensure_dir(eval_dir / "raw_radiomics")
 
-    # 3) UMAP / t-SNE
-    logger.info("Saving UMAP & t-SNE plots...")
-
-    z_umap = save_umap_plot(
-        embeddings=embeddings,
-        labels=labels,
-        save_path=eval_dir / "umap_labels.png",
-        title="UMAP of projection space",
+    run_space_evaluation(
+        space_name="raw radiomics",
+        embeddings=raw_embeddings,
+        labels=raw_labels,
+        x_df=x_raw_df,
+        save_dir=raw_eval_dir,
+        logger=logger,
+        num_class=num_class,
     )
-
-    save_umap_plot(
-        embeddings=embeddings,
-        labels=cluster_ids,
-        save_path=eval_dir / "umap_kmeans.png",
-        title="UMAP of projection space with KMeans cluster ids",
-    )
-
-    z_tsne, labels_tsne, tsne_indices = save_tsne_plot(
-        embeddings=embeddings,
-        labels=labels,
-        save_path=eval_dir / "tsne_labels.png",
-        title="t-SNE of projection space",
-    ) 
-    # t-SNE uses sampled subset
-
-    # 4) representative points
-    logger.info("Finding representative points...")
-    umap_reps = find_representative_points(z_umap, labels)
-    # tsne_reps = find_representative_points(z_tsne, labels_tsne)
-    tsne_reps_local = find_representative_points(z_tsne, labels_tsne) # 저장되는 representative point가 전체 데이터 기준 index가 된다
-    tsne_reps = {k: int(tsne_indices[v]) for k, v in tsne_reps_local.items()}
-
-    rep_info = {
-        "umap_representatives": umap_reps,
-        "tsne_representatives": tsne_reps,
-    }
-    save_json(rep_info, eval_dir / "representative_points.json")
-
-    # 5) top-variance radiomics features on UMAP
-    logger.info("Visualizing top-variance feature representatives on UMAP...")
-
-    top_var_features = get_top_variance_features(x_all, top_k=5)
-    top_var_dir = ensure_dir(eval_dir / "top_variance_feature_umap")
-
-    top_var_summary = {}
-
-    for feature_name, var_value in top_var_features.items():
-        quantile_info = find_nearest_quantile_indices(
-            x_df=x_all,
-            feature_name=feature_name,
-            quantiles=(0.25, 0.5, 0.75),
-        )
-
-        save_feature_quantile_umap_plot(
-            z_umap=z_umap,
-            feature_name=feature_name,
-            quantile_info=quantile_info,
-            save_path=top_var_dir / f"{feature_name}_umap_quantiles.png",
-        )
-
-        top_var_summary[feature_name] = {
-            "variance": float(var_value),
-            "quantiles": quantile_info,
-        }
-
-    save_json(top_var_summary, eval_dir / "top_variance_feature_quantiles.json")
 
     logger.info("All evaluation finished!")
     logger.info("Detailed evaluation artifacts saved to: %s", eval_dir)
+
+    
