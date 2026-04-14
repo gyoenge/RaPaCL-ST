@@ -22,7 +22,7 @@ from src.pretrain_transtab.transtab_custom.modeling_transtab import (
     TransTabFeatureProcessor, 
     TransTabInputEncoder, 
     TransTabEncoder, 
-    # TransTabModel, # includes CLS token 
+    # TransTabModel, # only sinlge CLS token 
     TransTabProjectionHead, 
     TransTabLinearClassifier, 
 )
@@ -32,8 +32,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+### TransTabForRadiomicsCL
+
 class TransTabModelCustom(nn.Module):
-    """excludes CLS token, later added CLS(+Contrastive) selectively."""
+    """added CLS(+Contrastive) selectively."""
     def __init__(self, 
         # special token setting 
         separate_contrast_token: bool=True, # False이면 [CLS], True이면 [CLS]+[Contrastive]
@@ -255,14 +257,14 @@ class AdditionalToken(nn.Module):
         return outputs 
 
 
-class TransTabForRadiomics(TransTabModelCustom):
+class TransTabForRadiomicsCL(TransTabModelCustom):
     """Radiomics specific TransTab Model. 
-        - num_sub_cols 
-        - separate_contrast_token
-        - multi-task objectives  
-    """
+        - num_sub_cols 으로 partition 관리 
+        - separate_contrast_token 으로 CLS/CONTRASTIVE 분리 가능 
+        - multi-task objectives 으로 SUPERVISION/BATCHCORRECTION 가능 
+    """ 
     def __init__(self, 
-        # feature  
+        # feature 
         categorical_columns=None,
         numerical_columns=None, 
         binary_columns=None, 
@@ -278,6 +280,9 @@ class TransTabForRadiomics(TransTabModelCustom):
         num_sub_cols: List[int]=[93,62,31,15,7,3,1], # radiomics feature subset views inside the positive.
         # special token setting 
         separate_contrast_token: bool=True, # False이면 [CLS], True이면 [CLS]+[Contrastive]
+        # contrastive setting 
+        temperature=10,
+        base_temperature=10,
         # supervision setting 
         supervision_type: str="categorical", 
         num_class: int=6, # ex) ["Tumor-dominant", "Immune-dominant", "Stroma-dominant", "Necrotic", "Normal epithelial", "Mixed / ambiguous"]
@@ -308,12 +313,15 @@ class TransTabForRadiomics(TransTabModelCustom):
         )
 
         # sub modules 
-        # (i) projection head 
+        # (i) projection head & contrative setting 
         self.projection_dim = projection_dim
         self.projection_head = TransTabProjectionHead(
             hidden_dim=hidden_dim,
             projection_dim=projection_dim, 
         )
+        self.cross_entropy_loss = nn.CrossEntropyLoss()
+        self.temperature = temperature
+        self.base_temperature = base_temperature
         # (ii) classifier for supervision 
         self.num_class = num_class
         if supervision_type == "categorical": 
@@ -369,10 +377,14 @@ class TransTabForRadiomics(TransTabModelCustom):
         else:
             raise ValueError(f'expect input x to be pd.DataFrame, get {type(x)} instead')
 
+        # prepare for loss calculation 
         logits = self.classifier(feat_x_for_classification)
         feat_x_multiview = torch.stack(feat_x_list, axis=1)  # (bs, num_partition, projection_dim) 
 
-        return feat_x_multiview, logits 
+        # multi-task losses 
+        loss = _
+
+        return loss 
 
     def _build_sub_x_list_random(self, 
         x, # DataFrame with `num_sub_cols`` radiomics feature columns 
@@ -394,7 +406,70 @@ class TransTabForRadiomics(TransTabModelCustom):
             sub_x = x.copy()[selected_cols]
             sub_x_list.append(sub_x)
         return sub_x_list 
-        
+    
+    def _build_selfsupervised_contrastive_loss(
+        self,
+        feat_x_multiview,  # (batch_size, num_partition, projection_dim)
+    ):
+        """
+        Self-supervised contrastive loss.
+        Positive pairs are different views of the same sample.
+        """
+        device = feat_x_multiview.device
+        batch_size = feat_x_multiview.shape[0]
+        contrast_count = feat_x_multiview.shape[1]
+
+        if contrast_count < 2:
+            raise ValueError("Self-supervised contrastive loss requires at least 2 views per sample.")
+
+        # each sample is only positive with itself across different views
+        mask = torch.eye(batch_size, dtype=torch.float32, device=device)
+
+        # (batch_size * num_partition, projection_dim)
+        contrast_feature = torch.cat(torch.unbind(feat_x_multiview, dim=1), dim=0)
+
+        # use all views as anchors
+        anchor_feature = contrast_feature
+        anchor_count = contrast_count
+
+        # similarity logits
+        anchor_dot_contrast = torch.div(
+            torch.matmul(anchor_feature, contrast_feature.T),
+            self.temperature
+        )
+
+        # numerical stability
+        logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
+        logits = anchor_dot_contrast - logits_max.detach()
+
+        # expand mask to match flattened view structure
+        # (batch_size, batch_size) -> (batch_size * anchor_count, batch_size * contrast_count)
+        mask = mask.repeat(anchor_count, contrast_count)
+
+        # remove self-contrast: diagonal entries should not be counted
+        logits_mask = torch.ones_like(mask)
+        logits_mask.scatter_(
+            1,
+            torch.arange(batch_size * anchor_count, device=device).view(-1, 1),
+            0
+        )
+
+        mask = mask * logits_mask
+
+        # log_prob
+        exp_logits = torch.exp(logits) * logits_mask
+        log_prob = logits - torch.log(exp_logits.sum(dim=1, keepdim=True) + 1e-12)
+
+        # mean over positives
+        mask_sum = mask.sum(dim=1)
+        mean_log_prob_pos = (mask * log_prob).sum(dim=1) / (mask_sum + 1e-12)
+
+        # final loss
+        loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
+        loss = loss.view(anchor_count, batch_size).mean()
+
+        return loss 
+    
     def forward_withSubX(self, 
         sub_x_list: List[pd.DataFrame], 
     ): 
@@ -417,6 +492,7 @@ class TransTabForRadiomics(TransTabModelCustom):
         feat_x_multiview = torch.stack(feat_x_list, axis=1) # bs, num_partition, projection_dim 
         return feat_x_multiview, logits
 
+    ######################################
     # use parent's load method 
     # def load(self, ckpt_dir): pass 
 
@@ -454,8 +530,7 @@ class TransTabForRadiomics(TransTabModelCustom):
         return None 
 
 
-
-# About Batch Correction 
+### About Batch Correction ### 
 
 class GradReverse(Function):
     @staticmethod
