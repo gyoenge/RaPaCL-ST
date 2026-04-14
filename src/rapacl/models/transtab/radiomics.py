@@ -489,7 +489,7 @@ class TransTabForRadiomicsCL(TransTabModelCustom):
             feat_x_proj = feat_x[:,1,:]  # take the contrastive token embedding 
             feat_x_proj = self.projection_head(feat_x_proj) # bs, projection_dim 
             feat_x_list.append(feat_x_proj)
-        logits = self.clf(feat_x_for_cl)
+        logits = self.classifier(feat_x_for_cl)
         feat_x_multiview = torch.stack(feat_x_list, axis=1) # bs, num_partition, projection_dim 
         return feat_x_multiview, logits
 
