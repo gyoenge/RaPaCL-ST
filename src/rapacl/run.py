@@ -8,7 +8,7 @@ import torch
 import pandas as pd
 
 from src.rapacl.models.rapacl import RaPaCL
-from src.rapacl.losses.rapacl_criterion import RaPaCLCriterion
+from src.rapacl.losses import RaPaCLCriterion
 
 
 def set_seed(seed: int) -> None:

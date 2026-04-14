@@ -1,9 +1,45 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-from .contrastive import MultiModalNTXentLoss
-from .classification import PatchClassificationLoss, RadiomicsClassificationLoss
-from .batchcorrection import BatchCorrectionLoss
+
+class BatchCorrectionLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def forward(self, batch_logits, batch_labels):
+        return self.loss_fn(batch_logits, batch_labels)
+
+
+class PatchClassificationLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def forward(self, logits, targets):
+        return self.loss_fn(logits, targets)
+
+
+class RadiomicsClassificationLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def forward(self, logits, targets):
+        return self.loss_fn(logits, targets)
+
+
+class MultiModalNTXentLoss(nn.Module):
+    def __init__(self, temperature=0.07):
+        super().__init__()
+        self.temperature = temperature
+
+    def forward(self, patch_proj, radiomics_multiview_proj, sample_ids):
+        # patch_proj: [B, P]
+        # radiomics_multiview_proj: [B, V, P]
+        ...
+        return loss
 
 
 class RaPaCLCriterion(nn.Module):
