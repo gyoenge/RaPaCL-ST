@@ -372,7 +372,10 @@ class TransTabForRadiomicsCL(TransTabModelCustom):
                 if i == 0: # full feature column
                     feat_x_for_classification = feat_x # classifier 내부적으로 CLS 임베딩을 예측에 사용. 
                 # use contrastive token (idx=1), project the embedding, for contrastive learning 
-                feat_x_proj = feat_x[:,1,:] 
+                if self.contrastive_token is not None:
+                    feat_x_proj = feat_x[:, 1, :]
+                else:
+                    feat_x_proj = feat_x[:, 0, :]
                 feat_x_proj = self.projection_head(feat_x_proj)  
                 feat_x_list.append(feat_x_proj)
         else:
