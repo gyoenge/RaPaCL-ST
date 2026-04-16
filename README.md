@@ -7,29 +7,13 @@ RadiomicsFeature-Pathomics Contrastive Learning for Spatial Transcriptomics pred
 
 ---
 
-## Prepare data
+## Description 
 
-(i) Hugging Face 토큰 환경변수로 설정
-```bash
-touch .env
-HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxx
-echo ".env" >> .gitignore
-```
+### Prepare data
 
-(ii) HEST / HEST-Bench 다운로드
-```bash
-python -m src.data.download_hest --config configs/data/download_hest.yaml
-```
-
-(iii) gene list 추출
-```bash
-python -m src.data.extract_genes --config configs/data/extract_genes.yaml
-```
-
+Please refer to: `src/dataset/README.md`
 
 ---
-
-## RaPaCL
 
 ### Run RaPaCL
 
