@@ -1,14 +1,6 @@
-# 기존 Trainer를 최대한 유지하면서 DDP 옵션을 추가한 버전
-"""
-distributed, local_rank, rank, world_size 추가
-DataLoader에 DistributedSampler 사용
-DDP wrapping
-rank 0만 저장/출력
-validation metric은 all-reduce 해서 평균내기
-"""
+from __future__ import annotations
 
 import os
-import pdb
 import math
 import time
 import json
@@ -22,12 +14,10 @@ import numpy as np
 import pandas as pd
 from tqdm.autonotebook import trange
 
-from src.pretrain_transtab.transtab_custom import constants
-from src.pretrain_transtab.transtab_custom.evaluator import predict, get_eval_metric_fn, EarlyStopping
-from src.pretrain_transtab.transtab_custom.modeling_transtab import TransTabFeatureExtractor
-from src.pretrain_transtab.transtab_custom.trainer_utils import SupervisedTrainCollator, TrainDataset
-from src.pretrain_transtab.transtab_custom.trainer_utils import get_parameter_names
-from src.pretrain_transtab.transtab_custom.trainer_utils import get_scheduler
+from radtranstab.utils import constants
+from radtranstab.engine.evaluator import predict, get_eval_metric_fn, EarlyStopping
+# from radtranstab.models.transtab import TransTabFeatureExtractor
+from radtranstab.engine.trainer_utils import SupervisedTrainCollator, TrainDataset, get_parameter_names, get_scheduler
 
 import logging
 logger = logging.getLogger(__name__)

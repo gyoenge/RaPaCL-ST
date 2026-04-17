@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rapacl"
+version = "0.1.0" 
+description = "Radiomics feature and Pathomics Contrastive Learning for Spatial Transcriptomics prediction"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    { name="H.Son", email="gyoeng94@email.com" }
+]
+dependencies = [
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "transformers",
+]
+
+[project.optional-dependencies]
+dev = [
+    "torch",
+    "pytest",
+    "black",
+    "isort"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

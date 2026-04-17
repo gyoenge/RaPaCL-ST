@@ -1,12 +1,14 @@
-from collections import defaultdict
+from __future__ import annotations
+
 import os
-import pdb
-
-import torch
+from collections import defaultdict
 import numpy as np
-from sklearn.metrics import roc_auc_score, accuracy_score, mean_squared_error
+import torch
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, mean_squared_error, classification_report
 
-from src.pretrain_transtab.transtab_custom import constants
+from radtranstab.utils import constants
+from radtranstab.utils.misc import unwrap_dataset
+
 
 def predict(clf, 
     x_test,
@@ -188,3 +190,56 @@ class EarlyStopping:
             self.trace_func(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
         torch.save(model.state_dict(), os.path.join(self.path, constants.WEIGHTS_NAME))
         self.val_loss_min = val_loss
+
+###
+
+def evaluate_classifier(model, testset, logger):
+    """
+        train new classifier head for representation classification evaluation. 
+    """
+    x_test, y_test = unwrap_dataset(testset)
+
+    y_pred = predict(model, x_test)
+    y_pred = np.asarray(y_pred)
+
+    logger.info("Prediction shape: %s", y_pred.shape)
+
+    # binary classification
+    if y_pred.ndim == 1 or (y_pred.ndim == 2 and y_pred.shape[1] == 1):
+        y_score = y_pred.reshape(-1)
+        y_label = (y_score >= 0.5).astype(int)
+
+        acc = accuracy_score(y_test, y_label)
+        f1 = f1_score(y_test, y_label)
+        try:
+            auc = roc_auc_score(y_test, y_score)
+        except Exception as e:
+            auc = None
+            logger.warning("Failed to compute ROC-AUC: %s", e)
+
+        logger.info("=== Test Classification Metrics ===")
+        logger.info("Test Accuracy: %.6f", acc)
+        logger.info("Test F1      : %.6f", f1)
+        if auc is not None:
+            logger.info("Test AUROC   : %.6f", auc)
+
+        logger.info("\n%s", classification_report(y_test, y_label, digits=4))
+
+    # multiclass classification
+    else:
+        y_label = np.argmax(y_pred, axis=1)
+
+        acc = accuracy_score(y_test, y_label)
+        f1_macro = f1_score(y_test, y_label, average="macro")
+
+        logger.info("=== Test Classification Metrics ===")
+        logger.info("Test Accuracy : %.6f", acc)
+        logger.info("Test F1-macro : %.6f", f1_macro)
+
+        try:
+            auc_macro_ovr = roc_auc_score(y_test, y_pred, multi_class="ovr", average="macro")
+            logger.info("Test AUROC(ovr, macro): %.6f", auc_macro_ovr)
+        except Exception as e:
+            logger.warning("Failed to compute multiclass ROC-AUC: %s", e)
+
+        logger.info("\n%s", classification_report(y_test, y_label, digits=4))

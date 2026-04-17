@@ -1,8 +1,8 @@
-import pdb
+from __future__ import annotations
+
 import os
 import random
 import math
-
 import numpy as np
 import pandas as pd
 import torch
@@ -16,7 +16,8 @@ from transformers.optimization import (
     get_constant_schedule_with_warmup
 )
 
-from src.pretrain_transtab.transtab_custom.modeling_transtab import TransTabFeatureExtractor
+from radtranstab.models.transtab import TransTabFeatureExtractor
+
 
 TYPE_TO_SCHEDULER_FUNCTION = {
     'linear': get_linear_schedule_with_warmup,
@@ -26,6 +27,7 @@ TYPE_TO_SCHEDULER_FUNCTION = {
     'constant': get_constant_schedule,
     'constant_with_warmup': get_constant_schedule_with_warmup,
 }
+
 
 class TrainDataset(Dataset):
     def __init__(self, trainset):
@@ -66,6 +68,7 @@ class TrainCollator:
     def __call__(self, data):
         raise NotImplementedError
 
+
 class SupervisedTrainCollator(TrainCollator):
     def __init__(self,
         categorical_columns=None,
@@ -86,6 +89,7 @@ class SupervisedTrainCollator(TrainCollator):
         y = pd.concat([row[1] for row in data])
         inputs = self.feature_extractor(x)
         return inputs, y
+
 
 class TransTabCollatorForCL(TrainCollator):
     '''support positive pair sampling for contrastive learning of transtab model.
@@ -159,6 +163,7 @@ class TransTabCollatorForCL(TrainCollator):
         sub_x_list.append(pd.concat([x.copy().drop(corrupt_cols,axis=1), x_corrupt], axis=1))
         return sub_x_list
 
+
 def get_parameter_names(model, forbidden_layer_types):
     """
     Returns the names of the model parameters that are not inside a forbidden layer.
@@ -174,11 +179,13 @@ def get_parameter_names(model, forbidden_layer_types):
     result += list(model._parameters.keys())
     return result
 
+
 def random_seed(seed):
     os.environ['PYTHONHASHSEED'] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+
 
 def get_scheduler(
     name,
@@ -221,3 +228,4 @@ def get_scheduler(
         raise ValueError(f"{name} requires `num_training_steps`, please provide that argument.")
 
     return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
+

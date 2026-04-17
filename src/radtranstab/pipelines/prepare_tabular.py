@@ -1,26 +1,3 @@
-"""
-Prepare Custom Datasets from Radiomcis Feature Parquets, 
-    for TransTab Pretraining.
-
-Structure: 
-radiomics_normed_tabular/
-├── data_processed.csv
-└── numerical_feature.txt 
-
-data_processed.csv
-,original_firstorder_mean,original_glcm_contrast,wavelet_h_glrlm_runentropy,target_label
-0,0.182,1.54,3.21,1
-1,0.093,0.88,2.74,0
-2,0.201,1.12,3.05,1
---> use sample_id by number as target_label. 
-
-numerical_feature.txt
-original_firstorder_mean
-original_glcm_contrast
-wavelet_h_glrlm_runentropy
---> should be lowercase to avoid error. 
-
-"""
 from __future__ import annotations
 
 import argparse
@@ -29,11 +6,10 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from src.pretrain_transtab.transtab_custom.dataset import load_single_data
-
-from src.common.config import load_yaml
-from src.common.logger import setup_logger
-from src.common.utils import ensure_dir, save_yaml, seed_everything
+from radtranstab.data.dataset import load_single_data
+from radtranstab.utils.config import load_yaml
+from radtranstab.utils.logging import setup_logger
+from radtranstab.utils.misc import ensure_dir, save_yaml, seed_everything
 
 
 def parse_args() -> argparse.Namespace:

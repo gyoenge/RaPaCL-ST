@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import numpy as np
 import torch
@@ -13,8 +15,7 @@ from sklearn.metrics import (
 from sklearn.manifold import TSNE
 from umap import UMAP
 
-from src.common.utils import ensure_dir
-from src.pretrain_transtab.transtab_custom import unwrap_dataset
+from radtranstab.utils.misc import ensure_dir, unwrap_dataset
 
 
 def extract_projection_embeddings(model, dataset, batch_size=256, logger=None):
