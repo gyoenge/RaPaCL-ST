@@ -29,6 +29,20 @@ dataset:
     - diagnostics
     - metadata
 
+    - cellseg_inflammatory_
+    - cellseg_connective_
+    - cellseg_epithelial_
+    - cellseg_neoplastic_
+    - cellseg_dead_
+    - cellseg_class_-1_
+
+    - morph_inflammatory_
+    - morph_connective_
+    - morph_epithelial_
+    - morph_neoplastic_
+    - morph_dead_
+    - morph_class_-1_
+
   # 현재 코드 is_feature_column()이 startswith(prefix)로만 판별하므로
   # 실제 컬럼 시작 문자열에 맞춰 적어야 함
   radiomics_valid_prefixes:
@@ -37,21 +51,9 @@ dataset:
 
     # cellseg radiomics
     - cellseg_all_original_
-    - cellseg_inflammatory_original_
-    - cellseg_connective_original_
-    - cellseg_epithelial_original_
-    - cellseg_neoplastic_original_
-    - cellseg_dead_original_
-    - cellseg_class_-1_original_
 
     # morphology summary features
     - morph_
-    - morph_inflammatory_
-    - morph_connective_
-    - morph_epithelial_
-    - morph_neoplastic_
-    - morph_dead_
-    - morph_class_-1_
 
     # distribution/count ratio features
     - dist_
@@ -76,4 +78,3 @@ dataset:
 runtime:
   encode_cat: false
   test_load_single_data: true
-  
