@@ -8,7 +8,7 @@ cd RaPaCL/
 - from H5 (HEST-style)
   ```bash
   python -m src.radtranstab.pipelines.prepare_tabular \
-    --config configs/data/prepare_tabular.yaml 
+    --config src/radtranstab/configs/prepare_tabular/IDC_HESTBENCH_CELLSEG.yaml
   ```
 
 (ii) pretrain 

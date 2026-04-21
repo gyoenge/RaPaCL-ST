@@ -212,7 +212,11 @@ def main() -> None:
     seed_everything(cfg.get("seed", 42))
 
     log_dir = cfg["paths"]["log_dir"]
-    timestamp, logger = setup_logger(log_dir=log_dir, name="transtab_dataset")
+    timestamp, logger = setup_logger(
+        log_dir=log_dir,
+        name="transtab_dataset",
+        rank=0,
+    )
 
     logger.info("Configuration loaded from: %s", args.config)
     logger.info("Configuration: %s", cfg)
