@@ -28,7 +28,7 @@ cd RaPaCL/
 
 - pretrain with single GPU 
   ```bash
-  python -m src.radtranstab.pretrain \
+  python -m src.radtranstab.pipelines.pretrain \
     --config src/radtranstab/configs/idc_hestbench_withshape.yaml \
     --distributed false \
     --mode train
@@ -37,7 +37,7 @@ cd RaPaCL/
 - pretrain with multi GPU 
   ```bash
   CUDA_VISIBLE_DEVICES=0,1 torchrun --nproc_per_node=2 \
-    -m src.radtranstab.pretrain \
+    -m src.radtranstab.pipelines.pretrain \
     --config src/radtranstab/configs/idc_hestbench_withshape.yaml \
     --mode train
 
@@ -45,7 +45,7 @@ cd RaPaCL/
 
 - simple evaluation of pretraining
   ```bash 
-  python -m src.radtranstab.pretrain \
+  python -m src.radtranstab.pipelines.pretrain \
     --config src/radtranstab/configs/idc_hestbench_withshape.yaml \
     --distributed false \
     --mode eval
@@ -53,7 +53,7 @@ cd RaPaCL/
 
 - detailed evaluation of pretraining
   ```bash
-  python -m -m src.radtranstab.pretrain \
+  python -m -m src.radtranstab.pipelines.pretrain \
     --config src/radtranstab/configs/idc_hestbench_withshape.yaml \
     --distributed false \
     --mode eval_detailed
