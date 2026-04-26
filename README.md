@@ -15,7 +15,7 @@ Please refer to: `src/dataset/README.md` and `src/baselines/README.md`.
 
 ### Intra-Tabular Pretraining (Radiomics TransTab)
 
-Please refer to: `src/pretrain_transtab/README.md`. 
+Please refer to: `src/radtranstab/README.md`. 
 
 ---
 
