@@ -15,9 +15,9 @@ import pandas as pd
 from tqdm.autonotebook import trange
 
 from radtranstab.utils import constants
-from radtranstab.engine.evaluator import predict, get_eval_metric_fn, EarlyStopping
+from radtranstab.eval.evaluator import predict, get_eval_metric_fn, EarlyStopping
 # from radtranstab.models.transtab import TransTabFeatureExtractor
-from radtranstab.engine.trainer_utils import SupervisedTrainCollator, TrainDataset, get_parameter_names, get_scheduler
+from radtranstab.engines.utils import SupervisedTrainCollator, TrainDataset, get_parameter_names, get_scheduler
 
 import logging
 logger = logging.getLogger(__name__)
