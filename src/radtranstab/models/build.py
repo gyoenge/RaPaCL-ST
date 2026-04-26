@@ -15,11 +15,6 @@ including integration with anatomical positional embeddings (APE).
 """
 
 import os
-import json
-from loguru import logger
-import torch
-import numpy as np
-import pandas as pd
 
 from radtranstab.models._embed import TransTabFeatureExtractor
 from radtranstab.models._transtab import TransTabClassifier
@@ -28,11 +23,11 @@ import radtranstab.models.constants as constants
 
 
 def build_extractor(
-    categorical_columns=None,
-    numerical_columns=None,
-    binary_columns=None,
-    ignore_duplicate_cols=False,
-    disable_tokenizer_parallel=False,
+    categorical_columns=constants.DEFAULT_CATEGORICAL_COLUMNS,
+    numerical_columns=constants.DEFAULT_NUMERICAL_COLUMNS,
+    binary_columns=constants.DEFAULT_BINARY_COLUMNS,
+    ignore_duplicate_cols=constants.IGNORE_DUPLICATE_COLS,
+    disable_tokenizer_parallel=constants.DISABLE_TOKENIZER_PARALLEL,
     checkpoint=None,
     **kwargs,) -> TransTabFeatureExtractor:
     '''Build a feature extractor for TransTab model.
@@ -82,18 +77,18 @@ def build_extractor(
     return feature_extractor
 
 def build_classifier(
-    categorical_columns=None,
-    numerical_columns=None,
-    binary_columns=None,
-    feature_extractor=None,
-    num_class=2,
-    hidden_dim=128,
-    num_layer=2,
-    num_attention_head=8,
-    hidden_dropout_prob=0,
-    ffn_dim=256,
-    activation='relu',
-    device='cuda:0',
+    categorical_columns=constants.DEFAULT_CATEGORICAL_COLUMNS,
+    numerical_columns=constants.DEFAULT_NUMERICAL_COLUMNS,
+    binary_columns=constants.DEFAULT_BINARY_COLUMNS,
+    feature_extractor=constants.CLASSIFIER_FEATURE_EXTRACTOR,
+    num_class=constants.CLASSIFIER_NUM_CLASS,
+    hidden_dim=constants.CLASSIFIER_HIDDEN_DIM,
+    num_layer=constants.CLASSIFIER_NUM_LAYER,
+    num_attention_head=constants.CLASSIFIER_NUM_ATTENTION_HEAD,
+    hidden_dropout_prob=constants.CLASSIFIER_HIDDEN_DROPOUT_PROB,
+    ffn_dim=constants.CLASSIFIER_FFN_DIM,
+    activation=constants.CLASSIFIER_ACTIVATION,
+    device=constants.CLASSIFIER_DEVICE,
     checkpoint=None,
     **kwargs) -> TransTabClassifier:
     '''Build a :class:`transtab.modeling_transtab.TransTabClassifier`.
@@ -166,21 +161,21 @@ def build_classifier(
     return model
 
 def build_radiomics_learner(
-    categorical_columns=None,
-    numerical_columns=None,
-    binary_columns=None,
-    feature_extractor=None,
-    num_class=2,
-    hidden_dim=128,
-    num_layer=2,
-    num_attention_head=8,
-    hidden_dropout_prob=0,
-    ffn_dim=256,
-    projection_dim=128,
-    num_sub_cols=[72, 54, 36, 18, 9, 3, 1],
-    gpe_drop_rate=0.1,
-    activation='relu',
-    device='cuda:0',
+    categorical_columns=constants.DEFAULT_CATEGORICAL_COLUMNS,
+    numerical_columns=constants.DEFAULT_NUMERICAL_COLUMNS,
+    binary_columns=constants.DEFAULT_BINARY_COLUMNS,
+    feature_extractor=constants.RADTRANSTAB_FEATURE_EXTRACTOR,
+    num_class=constants.RADTRANSTAB_NUM_CLASS,
+    hidden_dim=constants.RADTRANSTAB_HIDDEN_DIM,
+    num_layer=constants.RADTRANSTAB_NUM_LAYER,
+    num_attention_head=constants.RADTRANSTAB_NUM_ATTENTION_HEAD,
+    hidden_dropout_prob=constants.RADTRANSTAB_HIDDEN_DROPOUT_PROB,
+    ffn_dim=constants.RADTRANSTAB_FFN_DIM,
+    projection_dim=constants.RADTRANSTAB_PROJECTION_DIM,
+    num_sub_cols=constants.RADTRANSTAB_NUM_SUB_COLS,
+    gpe_drop_rate=constants.RADTRANSTAB_GPE_DROP_RATE,
+    activation=constants.RADTRANSTAB_ACTIVATION,
+    device=constants.RADTRANSTAB_DEVICE,
     checkpoint=None,
     ignore_duplicate_cols=True,
     **kwargs,
