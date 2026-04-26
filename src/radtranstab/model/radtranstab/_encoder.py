@@ -6,7 +6,7 @@ from torch import nn
 from torch import Tensor
 import torch.nn.functional as F
 
-import radtranstab.model.constants as constants
+import radtranstab.model.radtranstab.constants as constants
 
 
 def _get_activation_fn(activation):

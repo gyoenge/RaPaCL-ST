@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from radtranstab.engines.constants import CHECKPOINT_PATH
-import radtranstab.model.constants as constants
+import radtranstab.model.radtranstab.constants as constants
 
 
 class TransTabWordEmbedding(nn.Module):

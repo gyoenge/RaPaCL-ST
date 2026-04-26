@@ -16,10 +16,10 @@ including integration with anatomical positional embeddings (APE).
 
 import os
 
-from radtranstab.model._embed import TransTabFeatureExtractor
-from radtranstab.model._transtab import TransTabClassifier
-from radtranstab.model._radtranstab import TransTabForRadiomics
-import radtranstab.model.constants as constants 
+from radtranstab.model.radtranstab._embed import TransTabFeatureExtractor
+from radtranstab.model.radtranstab._transtab import TransTabClassifier
+from radtranstab.model.radtranstab._radtranstab import TransTabForRadiomics
+import radtranstab.model.radtranstab.constants as constants 
 
 
 def build_extractor(
