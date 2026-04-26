@@ -12,6 +12,7 @@ import torch.nn.init as nn_init
 import numpy as np
 import pandas as pd
 
+from radtranstab.engines.constants import CHECKPOINT_PATH
 import radtranstab.model.constants as constants
 
 
@@ -84,7 +85,7 @@ class TransTabFeatureExtractor:
             self.tokenizer = BertTokenizerFast.from_pretrained('./transtab/tokenizer')
         else:
             self.tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
-            self.tokenizer.save_pretrained('./transtab/tokenizer')
+            self.tokenizer.save_pretrained(os.path.join(CHECKPOINT_PATH, 'tokenizer'))
         self.tokenizer.__dict__['model_max_length'] = 512
         if disable_tokenizer_parallel: # disable tokenizer parallel
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -187,16 +188,18 @@ class TransTabFeatureExtractor:
     def save(self, path):
         '''save the feature extractor configuration to local dir.
         '''
-        save_path = os.path.join(path, constants.EXTRACTOR_STATE_DIR)
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
+        # save_path = os.path.join(path, constants.EXTRACTOR_STATE_DIR)
+        # if not os.path.exists(save_path):
+        #     os.makedirs(save_path)
 
         # save tokenizer
-        tokenizer_path = os.path.join(save_path, constants.TOKENIZER_DIR)
+        # tokenizer_path = os.path.join(save_path, constants.TOKENIZER_DIR)
+        tokenizer_path = os.path.join(CHECKPOINT_PATH, constants.TOKENIZER_DIR)
         self.tokenizer.save_pretrained(tokenizer_path)
 
         # save other configurations
-        coltype_path = os.path.join(save_path, constants.EXTRACTOR_STATE_NAME)
+        # coltype_path = os.path.join(save_path, constants.EXTRACTOR_STATE_NAME)
+        coltype_path = os.path.join(CHECKPOINT_PATH, constants.EXTRACTOR_STATE_NAME)
         col_type_dict = {
             'categorical': self.categorical_columns,
             'binary': self.binary_columns,

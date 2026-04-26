@@ -40,58 +40,50 @@ def extract_state_dict(checkpoint: Any) -> Dict[str, torch.Tensor]:
 
 
 def load_model_radiomics_from_full_checkpoint(
-    model_radiomics: torch.nn.Module,
-    checkpoint_path: str,
-    device: torch.device,
-    strict: bool = False,
-) -> None:
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    state_dict = extract_state_dict(checkpoint)
+    model_radiomics,
+    checkpoint_path,
+    device,
+    strict=False,
+):
+    if os.path.isdir(checkpoint_path):
+        model_path = os.path.join(checkpoint_path, "pytorch_model.bin")
+    else:
+        model_path = checkpoint_path
 
-    prefixes = [
-        "model_radiomics.",
-        "radiomics_model.",
-        "module.model_radiomics.",
-        "module.radiomics_model.",
-    ]
+    print(f"[INFO] loading model weights from: {model_path}")
 
-    model_keys = set(model_radiomics.state_dict().keys())
-    radiomics_state = {}
+    state_dict = torch.load(model_path, map_location=device)
 
-    for key, value in state_dict.items():
-        loaded = False
+    if "model" in state_dict:
+        state_dict = state_dict["model"]
+    elif "model_state_dict" in state_dict:
+        state_dict = state_dict["model_state_dict"]
+    elif "state_dict" in state_dict:
+        state_dict = state_dict["state_dict"]
 
-        for prefix in prefixes:
-            if key.startswith(prefix):
-                new_key = key[len(prefix):]
-                radiomics_state[new_key] = value
-                loaded = True
-                break
+    # classifier head 제외
+    filtered_state_dict = {
+        k: v for k, v in state_dict.items()
+        if not k.startswith("clf.")
+    }
 
-        if not loaded and key in model_keys:
-            radiomics_state[key] = value
+    missing_keys, unexpected_keys = model_radiomics.load_state_dict(
+        filtered_state_dict,
+        strict=False,
+    )
 
-    if len(radiomics_state) == 0:
-        raise ValueError(
-            f"No model_radiomics weights found in checkpoint: {checkpoint_path}"
-        )
+    print("[INFO] checkpoint loaded except classifier head")
+    print(f"[INFO] loaded keys: {len(filtered_state_dict)}")
+    print(f"[INFO] missing keys: {len(missing_keys)}")
+    print(f"[INFO] unexpected keys: {len(unexpected_keys)}")
 
-    result = model_radiomics.load_state_dict(radiomics_state, strict=strict)
+    for k in missing_keys:
+        print("  [MISSING]", k)
 
-    print(f"[Checkpoint] Loaded from: {checkpoint_path}")
-    print(f"[Checkpoint] Loaded keys: {len(radiomics_state)}")
-    print(f"[Checkpoint] Missing keys: {len(result.missing_keys)}")
-    print(f"[Checkpoint] Unexpected keys: {len(result.unexpected_keys)}")
+    for k in unexpected_keys:
+        print("  [UNEXPECTED]", k)
 
-    if result.missing_keys:
-        print("[Checkpoint] Missing:")
-        for key in result.missing_keys:
-            print(f"  - {key}")
-
-    if result.unexpected_keys:
-        print("[Checkpoint] Unexpected:")
-        for key in result.unexpected_keys:
-            print(f"  - {key}")
+    return missing_keys, unexpected_keys
 
 
 def save_checkpoint(
