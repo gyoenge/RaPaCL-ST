@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 import pandas as pd
 from torch.utils.data import Dataset
 
-from radtranstab.data.constants_radfeatcols import RADIOMICS_FEATURES_NAMES
+from rapacl.data.constants_radfeatcols import RADIOMICS_FEATURES_NAMES
 
 
 class HestRadiomicsDataset(Dataset):

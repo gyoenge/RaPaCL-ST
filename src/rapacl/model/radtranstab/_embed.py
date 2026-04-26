@@ -12,8 +12,8 @@ import torch.nn.init as nn_init
 import numpy as np
 import pandas as pd
 
-from radtranstab.engines.constants import CHECKPOINT_PATH
-import radtranstab.model.radtranstab.constants as constants
+from rapacl.engines.constants import CHECKPOINT_PATH
+import rapacl.model.radtranstab.constants as constants
 
 
 class TransTabWordEmbedding(nn.Module):

@@ -5,10 +5,10 @@ import torch
 import numpy as np
 import pandas as pd
 
-from radtranstab.model.radtranstab._token import ContrastiveToken
-from radtranstab.model.radtranstab._head import TransTabProjectionHead, TransTabLinearClassifier
-from radtranstab.model.radtranstab._transtab import TransTabModel
-import radtranstab.model.radtranstab.constants as constants 
+from rapacl.model.radtranstab._token import ContrastiveToken
+from rapacl.model.radtranstab._head import TransTabProjectionHead, TransTabLinearClassifier
+from rapacl.model.radtranstab._transtab import TransTabModel
+import rapacl.model.radtranstab.constants as constants 
 
 
 class TransTabForRadiomics(TransTabModel):

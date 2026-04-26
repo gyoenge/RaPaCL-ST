@@ -5,11 +5,11 @@ import torch
 from torch import nn
 import pandas as pd
 
-from radtranstab.model.radtranstab._embed import TransTabFeatureExtractor, TransTabFeatureProcessor
-from radtranstab.model.radtranstab._encoder import TransTabEncoder, TransTabInputEncoder
-from radtranstab.model.radtranstab._token import TransTabCLSToken
-from radtranstab.model.radtranstab._head import TransTabLinearClassifier
-import radtranstab.model.radtranstab.constants as constants
+from rapacl.model.radtranstab._embed import TransTabFeatureExtractor, TransTabFeatureProcessor
+from rapacl.model.radtranstab._encoder import TransTabEncoder, TransTabInputEncoder
+from rapacl.model.radtranstab._token import TransTabCLSToken
+from rapacl.model.radtranstab._head import TransTabLinearClassifier
+import rapacl.model.radtranstab.constants as constants
 
 
 class TransTabModel(nn.Module):

@@ -3,17 +3,17 @@ import json
 import torch
 from torch.utils.data import DataLoader
 
-from radtranstab.data.dataset import HestRadiomicsDataset, radiomics_collate_fn
-from radtranstab.data.constants_radfeatcols import RADIOMICS_FEATURES_NAMES
-from radtranstab.model.radtranstab.build import build_radiomics_learner
-from radtranstab.engines.trainer_utils import (
+from rapacl.data.dataset import HestRadiomicsDataset, radiomics_collate_fn
+from rapacl.data.constants_radfeatcols import RADIOMICS_FEATURES_NAMES
+from rapacl.model.radtranstab.build import build_radiomics_learner
+from rapacl.engines.trainer_utils import (
     set_seed,
     load_model_radiomics_from_full_checkpoint,
     train_one_epoch,
     evaluate,
     save_checkpoint,
 )
-import radtranstab.engines.constants as constants
+import rapacl.engines.constants as constants
 
 
 def build_model_radiomics(device):
