@@ -1,14 +1,11 @@
 import os
 import json
-import argparse
-
 import torch
 from torch.utils.data import DataLoader
 
-import transtab
-
-from radtranstab.data.dataset import MyDataset, radiomics_collate_fn
+from radtranstab.data.dataset import HestRadiomicsDataset, radiomics_collate_fn
 from radtranstab.data.constants_radfeatcols import RADIOMICS_FEATURES_NAMES
+from radtranstab.model.build import build_radiomics_learner
 from radtranstab.engines.trainer_utils import (
     set_seed,
     load_model_radiomics_from_full_checkpoint,
@@ -16,50 +13,21 @@ from radtranstab.engines.trainer_utils import (
     evaluate,
     save_checkpoint,
 )
+import radtranstab.engines.constants as constants
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Train radiomics-only TransTab model.")
-
-    parser.add_argument("--train_jsonl_file", type=str, required=True)
-    parser.add_argument("--val_jsonl_file", type=str, required=True)
-    parser.add_argument("--root_dir", type=str, required=True)
-    parser.add_argument("--hdf5_file", type=str, required=True)
-
-    parser.add_argument("--checkpoint_path", type=str, default=None)
-    parser.add_argument("--output_dir", type=str, required=True)
-
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--weight_decay", type=float, default=1e-2)
-    parser.add_argument("--num_workers", type=int, default=4)
-
-    parser.add_argument("--num_class", type=int, default=4)
-    parser.add_argument("--hidden_dim", type=int, default=128)
-    parser.add_argument("--num_layer", type=int, default=2)
-    parser.add_argument("--projection_dim", type=int, default=384)
-    parser.add_argument("--dropout", type=float, default=0.1)
-
-    parser.add_argument("--use_amp", action="store_true")
-
-    return parser.parse_args()
-
-
-def build_model_radiomics(args, device):
-    model_radiomics = transtab.build_radiomics_learner(
+def build_model_radiomics(device):
+    model_radiomics = build_radiomics_learner(
         checkpoint=None,
         numerical_columns=RADIOMICS_FEATURES_NAMES,
-        num_class=args.num_class,
-        hidden_dim=args.hidden_dim,
-        num_layer=args.num_layer,
-        hidden_dropout_prob=args.dropout,
-        projection_dim=args.projection_dim,
-        activation="leakyrelu",
-        num_sub_cols=[72, 54, 36, 18, 9, 3, 1],
-        ape_drop_rate=0.0,
+        num_class=constants.NUM_CLASS,
+        # hidden_dim=constants.HIDDEN_DIM,
+        # num_layer=constants.NUM_LAYER,
+        hidden_dropout_prob=constants.DROPOUT,
+        projection_dim=constants.PROJECTION_DIM,
+        activation=constants.ACTIVATION,
+        # num_sub_cols=constants.NUM_SUB_COLS,
+        ape_drop_rate=constants.APE_DROP_RATE,
         device=device,
     )
 
@@ -69,26 +37,26 @@ def build_model_radiomics(args, device):
     return model_radiomics.to(device)
 
 
-def build_dataloaders(args):
-    train_dataset = MyDataset(
-        jsonl_file=args.train_jsonl_file,
-        hdf5_file=args.hdf5_file,
-        root_dir=args.root_dir,
-        is_train=True,
+def build_dataloaders():
+    train_dataset = HestRadiomicsDataset(
+        radiomics_file=constants.TRAIN_RADIOMCIS_FILE,
+        root_dir=constants.ROOT_DIR,
+        label_col=constants.LABEL_COL,
+        id_col=constants.ID_COL,
     )
 
-    val_dataset = MyDataset(
-        jsonl_file=args.val_jsonl_file,
-        hdf5_file=args.hdf5_file,
-        root_dir=args.root_dir,
-        is_train=False,
+    val_dataset = HestRadiomicsDataset(
+        radiomics_file=constants.VAL_RADIOMCIS_FILE,
+        root_dir=constants.ROOT_DIR,
+        label_col=constants.LABEL_COL,
+        id_col=constants.ID_COL,
     )
 
     train_loader = DataLoader(
         train_dataset,
-        batch_size=args.batch_size,
+        batch_size=constants.BATCH_SIZE,
         shuffle=True,
-        num_workers=args.num_workers,
+        num_workers=constants.NUM_WORKERS,
         pin_memory=True,
         collate_fn=radiomics_collate_fn,
         drop_last=False,
@@ -96,9 +64,9 @@ def build_dataloaders(args):
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=args.batch_size,
+        batch_size=constants.BATCH_SIZE,
         shuffle=False,
-        num_workers=args.num_workers,
+        num_workers=constants.NUM_WORKERS,
         pin_memory=True,
         collate_fn=radiomics_collate_fn,
         drop_last=False,
@@ -108,33 +76,31 @@ def build_dataloaders(args):
 
 
 def main():
-    args = parse_args()
+    set_seed(constants.SEED)
 
-    set_seed(args.seed)
+    device = torch.device(constants.DEVICE)
+    os.makedirs(constants.OUTPUT_DIR, exist_ok=True)
 
-    device = torch.device(args.device)
-    os.makedirs(args.output_dir, exist_ok=True)
+    model_radiomics = build_model_radiomics(device)
 
-    model_radiomics = build_model_radiomics(args, device)
-
-    if args.checkpoint_path is not None:
+    if constants.CHECKPOINT_PATH is not None:
         load_model_radiomics_from_full_checkpoint(
             model_radiomics=model_radiomics,
-            checkpoint_path=args.checkpoint_path,
+            checkpoint_path=constants.CHECKPOINT_PATH,
             device=device,
             strict=False,
         )
 
-    train_loader, val_loader = build_dataloaders(args)
+    train_loader, val_loader = build_dataloaders()
 
     optimizer = torch.optim.AdamW(
         model_radiomics.parameters(),
-        lr=args.lr,
-        weight_decay=args.weight_decay,
+        lr=constants.LR,
+        weight_decay=constants.WEIGHT_DECAY,
     )
 
     criterion = torch.nn.CrossEntropyLoss(ignore_index=-1)
-    scaler = torch.amp.GradScaler() if args.use_amp else None
+    scaler = torch.amp.GradScaler() if constants.USE_AMP else None
 
     best_val_loss = float("inf")
     history = {
@@ -142,7 +108,7 @@ def main():
         "val": {},
     }
 
-    for epoch in range(args.epochs):
+    for epoch in range(constants.EPOCHS):
         train_metrics = train_one_epoch(
             model_radiomics=model_radiomics,
             loader=train_loader,
@@ -176,18 +142,18 @@ def main():
             best_val_loss = val_metrics["loss"]
 
             save_path = save_checkpoint(
-                output_dir=args.output_dir,
+                output_dir=constants.OUTPUT_DIR,
                 model_radiomics=model_radiomics,
                 optimizer=optimizer,
                 epoch=epoch,
                 metrics=val_metrics,
-                args=vars(args),
+                args=vars(constants),
                 name="best_model_radiomics",
             )
 
             print(f"Saved best checkpoint: {save_path}")
 
-        metrics_path = os.path.join(args.output_dir, "metrics.json")
+        metrics_path = os.path.join(constants.OUTPUT_DIR, "metrics.json")
         with open(metrics_path, "w") as f:
             json.dump(history, f, indent=4)
 
