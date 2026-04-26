@@ -1,86 +1,72 @@
 import os
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
-import h5py
-import torch
 import pandas as pd
 from torch.utils.data import Dataset
 
-
-LABEL_TO_INDEX = {
-    "SCC": 0,
-    "LCC": 1,
-    "ADC": 2,
-    "NOS": 3,
-}
+from radtranstab.data.constants_radfeatcols import RADIOMICS_FEATURES_NAMES
 
 
-class MyDataset(Dataset):
+class HestRadiomicsDataset(Dataset):
     def __init__(
         self,
-        jsonl_file: str,
-        hdf5_file: str,
-        root_dir: str,
-        is_train: bool = False,
+        radiomics_file: str,
+        root_dir: Optional[str] = None,
+        label_col: str = "target_label",
+        id_col: str = "barcode",
     ):
         super().__init__()
 
-        self.jsonl_file = jsonl_file
-        self.hdf5_file = hdf5_file
+        self.radiomics_file = radiomics_file
         self.root_dir = root_dir
-        self.is_train = is_train
+        self.label_col = label_col
+        self.id_col = id_col
 
-        self.data = []
-        with open(jsonl_file, "r") as f:
-            for line in f:
-                self.data.append(json.loads(line))
+        self.df = pd.read_parquet(radiomics_file)
 
-        self.hf = h5py.File(hdf5_file, "r")
+        self.feature_cols = RADIOMICS_FEATURES_NAMES 
 
-        min_max_path = os.path.join(root_dir, "radiomics_features_min_max.json")
-        with open(min_max_path, "r") as f:
-            self.radiomics_features_min_max = json.load(f)
+        missing_cols = [col for col in self.feature_cols if col not in self.df.columns]
+        if missing_cols:
+            raise ValueError(f"Missing feature columns: {missing_cols[:10]}")
 
-    def __len__(self):
-        return len(self.data)
+        if self.id_col not in self.df.columns:
+            raise ValueError(f"Missing id column: {self.id_col}")
 
-    def __del__(self):
-        if hasattr(self, "hf"):
-            try:
-                self.hf.close()
-            except Exception:
-                pass
+        if self.label_col not in self.df.columns:
+            raise ValueError(f"Missing label column: {self.label_col}")
 
-    def _normalize_radiomics_feature(self, feature_name: str, value: float) -> float:
-        min_value, max_value = self.radiomics_features_min_max[feature_name]
-        denom = max_value - min_value
+        self.radiomics_features_min_max = None
 
-        if denom == 0:
-            return 0.0
-
-        return (value - min_value) / denom
-
-    def _encode_label(self, label: str) -> int:
-        return LABEL_TO_INDEX.get(label, -1)
+    def __len__(self) -> int:
+        return len(self.df)
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
-        item = self.data[idx]
+        row = self.df.iloc[idx]
 
-        image_id = item["id"]
+        image_id = str(row[self.id_col])
 
-        radiomics_features_name = list(item["radiomics"].keys())
+        radiomics_features_name = self.feature_cols
         radiomics_features = []
 
         for feature_name in radiomics_features_name:
-            feature_value = item["radiomics"][feature_name]
-            normalized_value = self._normalize_radiomics_feature(
-                feature_name=feature_name,
-                value=feature_value,
-            )
-            radiomics_features.append(normalized_value)
+            feature_value = row[feature_name]
 
-        label = self._encode_label(item["label"])
+            if pd.isna(feature_value):
+                feature_value = 0.0
+
+            if self.normalize:
+                feature_value = self._normalize_radiomics_feature(
+                    feature_name=feature_name,
+                    value=float(feature_value),
+                )
+            else:
+                feature_value = float(feature_value)
+
+            radiomics_features.append(feature_value)
+
+        label = int(row[self.label_col])
 
         return {
             "idx": idx,
