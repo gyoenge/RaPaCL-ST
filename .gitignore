@@ -249,3 +249,6 @@ transtab/tokenizer/*
 src/pretrain_transtab/transtab_custom/test.ipynb
 */test.ipynb
 
+
+# checkpoints 
+src/radtranstab/checkpoints/
