@@ -15,12 +15,6 @@ RadiomicsFeature-Pathomics Contrastive Learning for Spatial Transcriptomics pred
 
 Please refer to: `src/dataset/README.md` and `src/baselines/README.md`. 
 
-### Intra-Tabular Pretraining (Radiomics TransTab)
-
-Please refer to: `src/radtranstab/README.md`. 
-
----
-
 ### Run RaPaCL
 
 ... 
