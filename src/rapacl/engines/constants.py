@@ -7,6 +7,10 @@ VAL_RADIOMCIS_FILE = "/root/workspace/datasets/rapacl_data/radiomics_features/TE
 FEATURE_LIST_PATH = "/root/workspace/datasets/rapacl_data/feature_list.txt"
 ROOT_DIR = "/root/workspace/datasets/rapacl_data/"
 
+GENE_LIST_PATH = "/root/workspace/datasets/rapacl_data/var_250genes.json"
+TRAIN_SPLIT_CSV = "/root/workspace/datasets/rapacl_data/splits/train_0.csv"
+VAL_SPLIT_CSV = "/root/workspace/datasets/rapacl_data/splits/test_0.csv"
+
 LABEL_COL = "target_label"
 ID_COL = "barcode"
 
@@ -35,5 +39,5 @@ BATCH_SIZE = 16
 EPOCHS = 100
 LR = 1e-4
 WEIGHT_DECAY = 1e-2
-NUM_WORKERS = 4
+NUM_WORKERS = 0
 USE_AMP = False

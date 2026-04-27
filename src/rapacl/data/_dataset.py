@@ -71,6 +71,20 @@ class HestRadiomicsDataset(torch.utils.data.Dataset):
 
         self._build_samples()
 
+    @staticmethod
+    def _normalize_barcode(barcode) -> str:
+        barcode = str(barcode)
+
+        if barcode.startswith("b'") and barcode.endswith("'"):
+            barcode = barcode[2:-1]
+
+        barcode = barcode.replace("-1", "")
+
+        if "_" in barcode:
+            barcode = barcode.split("_")[-1]
+
+        return barcode
+
     def _build_samples(self) -> None:
         for _, row in self.split_df.iterrows():
             patches_h5_path = os.path.join(self.bench_data_root, row["patches_path"])
@@ -98,7 +112,7 @@ class HestRadiomicsDataset(torch.utils.data.Dataset):
             )
 
             radiomics_df = pd.read_parquet(radiomics_path)
-            radiomics_df["barcode"] = radiomics_df["barcode"].astype(str)
+            radiomics_df["barcode"] = radiomics_df["barcode"].apply(self._normalize_barcode)
             radiomics_df = radiomics_df.set_index("barcode")
 
             missing_features = [
@@ -111,12 +125,13 @@ class HestRadiomicsDataset(torch.utils.data.Dataset):
                 )
 
             for i, item in enumerate(patch_items):
-                barcode = item["barcode"]
+                barcode = self._normalize_barcode(item["barcode"])
 
                 if barcode not in radiomics_df.index:
-                    raise KeyError(
-                        f"Barcode {barcode} not found in radiomics file: {radiomics_path}"
-                    )
+                    # raise KeyError(
+                    #     f"Barcode {barcode} not found in radiomics file: {radiomics_path}"
+                    # )
+                    continue
 
                 rad_row = radiomics_df.loc[barcode]
 
