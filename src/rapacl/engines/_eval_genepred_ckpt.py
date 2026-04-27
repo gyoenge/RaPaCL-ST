@@ -292,7 +292,8 @@ def main():
         radiomics_model=pretrained_model,
         gene_head=projection_gene_head,
         feature_cols=RADIOMICS_FEATURES_NAMES,
-        freeze_radiomics=True,
+        # freeze_radiomics=True,
+        freeze_radiomics=False,  # for quick testing, change to True for full training
     ).to(device)
 
     # =====================================================
