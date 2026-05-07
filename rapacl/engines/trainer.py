@@ -171,7 +171,7 @@ def eval_contrastive_epoch(
         loader,
         desc="stage1_val",
         leave=False,
-        disable=not is_main_process(),
+        disable=(not is_main_process()) or (not train.USE_TQDM),
     )
 
     for batch in iterator:
@@ -244,7 +244,7 @@ def train_gene_epoch(
         loader,
         desc="stage2_gene_train",
         leave=False,
-        disable=not is_main_process(),
+        disable=(not is_main_process()) or (not train.USE_TQDM),
     )
 
     for batch in iterator:
@@ -289,7 +289,7 @@ def eval_gene_epoch(
         loader,
         desc="stage2_gene_val",
         leave=False,
-        disable=not is_main_process(),
+        disable=(not is_main_process()) or (not train.USE_TQDM),
     )
 
     for batch in iterator:
