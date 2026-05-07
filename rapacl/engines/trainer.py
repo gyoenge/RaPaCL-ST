@@ -12,8 +12,8 @@ from rapacl.engines.data_utils import get_batch_tensor, get_target_label
 from rapacl.engines.losses import symmetric_info_nce
 from rapacl.engines.metrics import accuracy, compute_genewise_pcc
 from rapacl.engines.trainer_utils import freeze_module
-from rapacl.models.model import MMCLReconClsModel
-from rapacl.data.constants_radfeatcols import RADIOMICS_FEATURES_NAMES
+from rapacl.model.rapacl import MMCLReconClsModel
+from rapacl.configs.default.radiomics_columns import RADIOMICS_FEATURES_NAMES
 
 import rapacl.configs.default.train as train
 
