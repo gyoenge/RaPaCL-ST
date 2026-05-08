@@ -332,11 +332,23 @@ def radiomics_gradient_attribution(
     gene_indices: dict[str, int],
     max_batches: int,
 ):
+    """
+    Radiomics attribution.
+
+    1) Try gradient x input attribution.
+    2) If radiomics.grad is None, fallback to feature perturbation attribution.
+
+    This is safer because forward_gene() may detach / no_grad the radiomics branch.
+    """
+
+    num_features = len(RADIOMICS_FEATURES_NAMES)
+
     attr_sum = {
-        gene: torch.zeros(len(RADIOMICS_FEATURES_NAMES), device=device)
+        gene: torch.zeros(num_features, device=device)
         for gene in gene_indices
     }
     count = 0
+    used_gradient = True
 
     model.eval()
 
@@ -347,23 +359,62 @@ def radiomics_gradient_attribution(
         image = get_batch_tensor(batch, ("image", "img", "patch"), device)
         radiomics = get_batch_tensor(batch, ("radiomics", "radiomics_features"), device)
 
-        radiomics = radiomics.detach().clone().requires_grad_(True)
+        radiomics_for_grad = radiomics.detach().clone().requires_grad_(True)
 
-        out = model.forward_gene(image=image, radiomics=radiomics)
+        out = model.forward_gene(
+            image=image,
+            radiomics=radiomics_for_grad,
+        )
         pred = out["pred_gene"]
+
+        # ------------------------------------------------------------
+        # 1. Try gradient attribution
+        # ------------------------------------------------------------
+        batch_grad_available = True
 
         for gene_name, gene_idx in gene_indices.items():
             model.zero_grad(set_to_none=True)
 
-            if radiomics.grad is not None:
-                radiomics.grad.zero_()
+            if radiomics_for_grad.grad is not None:
+                radiomics_for_grad.grad.zero_()
 
             score = pred[:, gene_idx].sum()
             score.backward(retain_graph=True)
 
-            grad = radiomics.grad.detach()
-            attr = (grad * radiomics.detach()).abs().sum(dim=0)
+            if radiomics_for_grad.grad is None:
+                batch_grad_available = False
+                used_gradient = False
+                break
+
+            grad = radiomics_for_grad.grad.detach()
+            attr = (grad * radiomics_for_grad.detach()).abs().sum(dim=0)
             attr_sum[gene_name] += attr
+
+        # ------------------------------------------------------------
+        # 2. Fallback: perturb each radiomics feature
+        # ------------------------------------------------------------
+        if not batch_grad_available:
+            with torch.no_grad():
+                base_pred = model.forward_gene(
+                    image=image,
+                    radiomics=radiomics,
+                )["pred_gene"]
+
+                baseline = radiomics.mean(dim=0, keepdim=True)
+
+                for feat_idx in range(num_features):
+                    perturbed = radiomics.clone()
+                    perturbed[:, feat_idx] = baseline[:, feat_idx]
+
+                    perturbed_pred = model.forward_gene(
+                        image=image,
+                        radiomics=perturbed,
+                    )["pred_gene"]
+
+                    diff = (base_pred - perturbed_pred).abs()
+
+                    for gene_name, gene_idx in gene_indices.items():
+                        attr_sum[gene_name][feat_idx] += diff[:, gene_idx].sum()
 
         count += radiomics.size(0)
 
@@ -377,6 +428,7 @@ def radiomics_gradient_attribution(
                     "gene": gene_name,
                     "feature": feature_name,
                     "importance": float(value),
+                    "method": "gradient_x_input" if used_gradient else "feature_perturbation",
                 }
             )
 
