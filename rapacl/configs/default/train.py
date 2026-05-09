@@ -25,6 +25,7 @@ NUM_SUB_COLS = [72, 54, 36] # [72, 54, 36, 18, 9, 3, 1]
 APE_DROP_RATE = 0.0
 
 # Pathomics Settings
+BACKBONE = "uni" # "densenet121" | "resnet50" | "uni" 
 PATHOMICS_DIM = 1024
 PATH_PROJ_HIDDEN_DIM = 512
 

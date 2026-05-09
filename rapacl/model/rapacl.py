@@ -10,6 +10,7 @@ from torchvision import models
 
 from rapacl.configs.default.radiomics_columns import RADIOMICS_FEATURES_NAMES
 from rapacl.model.radtranstab.build import build_radiomics_learner
+from rapacl.model.patchenc import build_patch_encoder
 from rapacl.engines.trainer_utils import freeze_module, is_main_process
 
 import rapacl.configs.default.train as train
@@ -37,44 +38,25 @@ class MLPHead(nn.Module):
 
 
 class PathomicsEncoder(nn.Module):
-    def __init__(self, out_dim: int = 1024, pretrained: bool = True):
+    def __init__(
+        self,
+        backbone: str = "densenet121",
+        out_dim: int = 1024,
+        pretrained: bool = True,
+    ):
         super().__init__()
 
-        weights = models.DenseNet121_Weights.DEFAULT if pretrained else None
-        backbone = models.densenet121(weights=weights)
+        self.encoder, feat_dim = build_patch_encoder(
+            backbone=backbone,
+            pretrained=pretrained,
+        )
 
-        self.features = backbone.features
-        self.out_dim = 1024
-        self.proj = nn.Identity() if out_dim == self.out_dim else nn.Linear(self.out_dim, out_dim)
+        self.in_dim = feat_dim
+        self.out_dim = out_dim
+        self.proj = nn.Identity() if feat_dim == out_dim else nn.Linear(feat_dim, out_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dim() == 3:
-            x = x.unsqueeze(1)
-
-        if x.shape[1] == 1:
-            x = x.repeat(1, 3, 1, 1)
-
-        x = x.float()
-
-        if x.max() > 2:
-            x = x / 255.0
-
-        mean = torch.tensor(
-            [0.485, 0.456, 0.406],
-            device=x.device,
-        ).view(1, 3, 1, 1)
-
-        std = torch.tensor(
-            [0.229, 0.224, 0.225],
-            device=x.device,
-        ).view(1, 3, 1, 1)
-
-        x = (x - mean) / std
-
-        feat = self.features(x)
-        feat = F.relu(feat, inplace=True)
-        feat = F.adaptive_avg_pool2d(feat, (1, 1)).flatten(1)
-
+        feat = self.encoder(x)
         return self.proj(feat)
 
 
@@ -273,12 +255,14 @@ def build_model(
     device: torch.device,
     num_genes: int,
     num_radiomics_features: int,
+    backbone: str,
 ):
     radiomics_model = build_radiomics_model(device)
 
     pathomics_encoder = PathomicsEncoder(
+        backbone=backbone,
         out_dim=train.PATHOMICS_DIM,
-        pretrained=True,
+        pretrained=train.PRETRAINED,
     ).to(device)
 
     freeze_module(pathomics_encoder)

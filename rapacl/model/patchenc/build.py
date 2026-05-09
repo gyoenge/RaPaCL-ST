@@ -28,7 +28,7 @@ from model.patchenc import build_patch_encoder
 from model.patchenc import constants
 
 encoder, feat_dim = build_patch_encoder(
-    backbone=constants.BACKBONE,
+    backbone=constants.BASE_BACKBONE,
     pretrained=constants.PRETRAINED,
 )
 

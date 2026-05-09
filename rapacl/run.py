@@ -22,9 +22,15 @@ from rapacl.engines.trainer_utils import (
 from rapacl.engines.data_utils import build_dataset, build_loader
 from rapacl.engines.trainer import run_stage1, run_stage2
 from rapacl.model.rapacl import build_model
+from rapacl.model.rapacl_uni import build_uni_model
 from rapacl.configs.default.radiomics_columns import RADIOMICS_FEATURES_NAMES
 
 import rapacl.configs.default.train as train
+
+
+def get_experiment_name() -> str:
+    backbone = train.BACKBONE.lower().strip()
+    return "rapacl_uni_frozen" if backbone == "uni" else f"rapacl_{backbone}"
 
 
 def get_fold_split_paths(fold: int) -> tuple[str, str]:
@@ -90,11 +96,26 @@ def run_one_fold(
         print(f"[INFO][Fold {fold}] num_genes: {num_genes}")
         print(f"[INFO][Fold {fold}] num_radiomics_features: {num_radiomics_features}")
 
-    model = build_model(
-        device=device,
-        num_genes=num_genes,
-        num_radiomics_features=num_radiomics_features,
-    )
+    backbone = train.BACKBONE.lower().strip()
+    exp_name = get_experiment_name()
+
+    if is_main_process():
+        print(f"[INFO] backbone: {backbone}")
+        print(f"[INFO] experiment: {exp_name}")
+
+    if backbone == "uni":
+        model = build_uni_model(
+            device=device,
+            num_genes=num_genes,
+            num_radiomics_features=num_radiomics_features,
+        )
+    else:
+        model = build_model(
+            device=device,
+            num_genes=num_genes,
+            num_radiomics_features=num_radiomics_features,
+            backbone=backbone,
+        )
 
     if distributed:
         model = DDP(
@@ -106,7 +127,7 @@ def run_one_fold(
 
     save_dir = os.path.join(
         train.OUTPUT_CHECKPOINT_DIR,
-        "rapacl_baseline",
+        exp_name,
         f"fold_{fold}",
     )
 
@@ -233,9 +254,10 @@ def main():
     if is_main_process():
         final_result = summarize_cv_results(fold_results)
 
+        exp_name = get_experiment_name()
         result_dir = os.path.join(
             train.OUTPUT_CHECKPOINT_DIR,
-            "rapacl_baseline",
+            exp_name,
         )
         os.makedirs(result_dir, exist_ok=True)
 

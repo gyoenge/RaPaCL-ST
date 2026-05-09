@@ -1,8 +1,5 @@
 import os
 
-
-BACKBONE = "densenet121"  # "densenet121", "resnet50", "uni", "conch"
-
 PRETRAINED = True
 DEVICE = "cuda:0"
 PROJECT_DIR = os.path.join(os.path.expanduser("~"), "workspace", "RaPaCL")
