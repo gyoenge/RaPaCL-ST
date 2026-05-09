@@ -21,7 +21,7 @@ HIDDEN_DIM = 128
 PROJECTION_DIM = 384
 DROPOUT = 0.1
 ACTIVATION = "leakyrelu"
-NUM_SUB_COLS = [72, 54, 36, 18, 9, 3, 1]    
+NUM_SUB_COLS = [72, 54, 36] # [72, 54, 36, 18, 9, 3, 1]    
 APE_DROP_RATE = 0.0
 
 # Pathomics Settings
@@ -39,8 +39,8 @@ MMCL_LOSS = "multipos_nt_xent" # "symmetric_info_nce" | "multipos_nt_xent"
 
 CONTRASTIVE_TEMPERATURE = 0.25 # 0.07 | 0.15 ~ 0.3 
 
-MMCL_LAMBDA = 0.6 # 0.7 | 1.0 
-RECON_LAMBDA = 3.0 # 3.0 | 1.0 
+MMCL_LAMBDA = 1.0 # 0.6 # 0.7 | 1.0 
+RECON_LAMBDA = 25.0 # 3.0 | 1.0 
 CLS_LAMBDA = 1.0
 
 ### Train Settings 
@@ -55,8 +55,8 @@ USE_IMAGE_AUGMENTATION = True
 USE_PAIR_AUGMENT_BATCH = True
 
 WARMUP_RECON_EPOCHS = 5
-MMCL_RAMPUP_EPOCHS = 15 # 10
-STAGE1_EPOCHS = 25 # 20 
+MMCL_RAMPUP_EPOCHS = 20 # 15 # 10
+STAGE1_EPOCHS = 30 # 25 # 20 
 STAGE2_EPOCHS = 50
 
 LR = 1e-4
