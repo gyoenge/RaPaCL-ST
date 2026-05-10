@@ -194,7 +194,7 @@ def build_ablation_model(device, num_genes):
     backbone = getattr(
         train,
         "PATCH_BACKBONE",
-        getattr(patchenc_constants, "BACKBONE", "densenet121"),
+        getattr(patchenc_constants, "BASE_BACKBONE", "densenet121"),
     )
 
     pretrained = getattr(
