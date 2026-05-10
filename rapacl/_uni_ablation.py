@@ -14,7 +14,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.decomposition import PCA
-from sklearn.linear_model import RidgeCV
+from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader
@@ -29,7 +29,6 @@ import rapacl.configs.default.train as train
 
 SELECT_FOLDS = [0, 1, 2, 3]
 PCA_DIM = 256
-RIDGE_ALPHAS = [0.1, 1.0, 10.0, 100.0]
 MLP_EPOCHS = 50
 MLP_LR = 1e-4 
 MLP_WEIGHT_DECAY = 1e-3
@@ -321,7 +320,16 @@ def run_one_fold(fold: int, device: torch.device) -> dict:
 
     print(f"[INFO] PCA explained variance ratio sum: {pca.explained_variance_ratio_.sum():.4f}")
 
-    ridge = RidgeCV(alphas=RIDGE_ALPHAS)
+    alpha = 100 / (x_train_pca.shape[1] * y_train.shape[1])
+    print(f"[INFO] HEST-Bench Ridge alpha: {alpha}")
+
+    ridge = Ridge(
+        solver="lsqr",
+        alpha=alpha,
+        fit_intercept=False,
+        max_iter=1000,
+        random_state=train.SEED,
+    )
     ridge.fit(x_train_pca, y_train)
     pred_ridge = ridge.predict(x_val_pca)
 
