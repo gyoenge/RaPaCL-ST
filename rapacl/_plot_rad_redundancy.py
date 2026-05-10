@@ -362,7 +362,8 @@ def plot_tsne_variants(
 
     for variant in variants:
         name = variant["name"]
-        x_vis, meta_vis = variant["x"]
+        x_vis = variant["x"]
+        meta_vis = variant["meta"]
 
         if variant["use_pca"]:
             x_input = reduce_by_pca(x_vis, pca_dim=pca_dim)
@@ -427,7 +428,8 @@ def plot_umap_variants(
 
     for variant in variants:
         name = variant["name"]
-        x_vis, meta_vis = variant["x"]
+        x_vis = variant["x"]
+        meta_vis = variant["meta"]
 
         if variant["use_pca"]:
             x_input = reduce_by_pca(x_vis, pca_dim=pca_dim)
@@ -481,30 +483,6 @@ def subsample(x_scaled, meta, max_samples: int):
     indices = np.sort(indices)
 
     return x_scaled[indices], meta.iloc[indices].reset_index(drop=True)
-
-
-def plot_2d_embedding(z, meta, title: str, save_path: str):
-    plt.figure(figsize=(7, 6))
-
-    folds = sorted(meta["fold"].unique())
-
-    for fold in folds:
-        mask = meta["fold"].values == fold
-        plt.scatter(
-            z[mask, 0],
-            z[mask, 1],
-            s=8,
-            alpha=0.55,
-            label=f"fold {fold}",
-        )
-
-    plt.xlabel("Dim 1")
-    plt.ylabel("Dim 2")
-    plt.title(title)
-    plt.legend(markerscale=2)
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=300)
-    plt.close()
 
 
 def get_block_level1(feature: str) -> str:
