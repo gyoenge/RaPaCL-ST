@@ -1,4 +1,5 @@
-# python -m rapacl._gene_analysis --folds 0,1,2,3 
+# python -m rapacl._gene_analysis --model_type rapacl --folds 0,1,2,3
+# python -m rapacl._gene_analysis --model_type uni_mlp --folds 0,1,2,3
 
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from rapacl.engines.trainer_utils import set_seed
 from rapacl.engines.data_utils import build_dataset, build_loader, DEFAULT_DATASET_STRUCTURE
 from rapacl.model.rapacl import build_model
 from rapacl.model.rapacl_uni import build_uni_model
+from rapacl._uni_mlp import build_uni_mlp_model
 from rapacl.configs.default.radiomics_columns import RADIOMICS_FEATURES_NAMES
 
 import rapacl.configs.default.train as train
@@ -29,7 +31,10 @@ DEFAULT_DATASET_STRUCTURE = DEFAULT_DATASET_STRUCTURE.copy()
 PLOT_SPOT_SIZE = 3 # 0.5 (TENX99 fit) # 3 (others) 
 
 
-def get_experiment_name() -> str:
+def get_experiment_name(model_type: str = "rapacl") -> str:
+    if model_type == "uni_mlp":
+        return "uni_frozen_mlp"
+
     backbone = train.BACKBONE.lower().strip()
     return "rapacl_uni_frozen" if backbone == "uni" else f"rapacl_{backbone}"
 
@@ -58,6 +63,9 @@ def strip_module_prefix(state_dict: dict) -> dict:
 
 def find_best_stage2_checkpoint(save_dir: str) -> str:
     candidates = [
+        "best_uni_mlp.pt",
+        "best_densenet121_mlp.pt",
+        "best_stage2_genepred.pt",
         "stage2_best.pt",
         "best_stage2.pt",
         "best_model.pt",
@@ -89,7 +97,17 @@ def find_best_stage2_checkpoint(save_dir: str) -> str:
     raise FileNotFoundError(f"No checkpoint found in: {save_dir}")
 
 
-def build_eval_model(device: torch.device, num_genes: int):
+def build_eval_model(
+    device: torch.device,
+    num_genes: int,
+    model_type: str = "rapacl",
+):
+    if model_type == "uni_mlp":
+        return build_uni_mlp_model(
+            device=device,
+            num_genes=num_genes,
+        )
+
     backbone = train.BACKBONE.lower().strip()
     num_radiomics_features = len(RADIOMICS_FEATURES_NAMES)
 
@@ -146,10 +164,14 @@ def predict_gene_expression(model, loader, device: torch.device):
         radiomics = batch["radiomics"].to(device, non_blocking=True).float()
         target = batch["gene"].to(device, non_blocking=True).float()
 
-        output = model.forward_gene(
-            image=image,
-            radiomics=radiomics,
-        )
+        if hasattr(model, "forward_gene"):
+            output = model.forward_gene(
+                image=image,
+                radiomics=radiomics,
+            )
+            pred = output["pred_gene"]
+        else:
+            pred = model(image)
 
         pred = output["pred_gene"]
 
@@ -543,7 +565,12 @@ def save_spatial_expression_maps(
             print(f"[INFO] saved spatial map: {path}")
 
 
-def run_one_fold_analysis(fold: int, device: torch.device, checkpoint_path: str | None = None):
+def run_one_fold_analysis(
+    fold: int,
+    device: torch.device,
+    checkpoint_path: str | None = None,
+    model_type: str = "rapacl",
+):
     set_seed(train.SEED + fold * 100)
 
     _, val_split_csv = get_fold_split_paths(fold)
@@ -566,7 +593,7 @@ def run_one_fold_analysis(fold: int, device: torch.device, checkpoint_path: str 
     genes = val_dataset.genes
     num_genes = len(genes)
 
-    exp_name = get_experiment_name()
+    exp_name = get_experiment_name(model_type)
     save_dir = os.path.join(train.OUTPUT_CHECKPOINT_DIR, exp_name, f"fold_{fold}")
 
     if checkpoint_path is None:
@@ -574,7 +601,11 @@ def run_one_fold_analysis(fold: int, device: torch.device, checkpoint_path: str 
 
     print(f"[INFO][Fold {fold}] checkpoint: {checkpoint_path}")
 
-    model = build_eval_model(device=device, num_genes=num_genes)
+    model = build_eval_model(
+        device=device,
+        num_genes=num_genes,
+        model_type=model_type,
+    )
 
     ckpt = torch.load(
         checkpoint_path,
@@ -648,6 +679,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--folds", type=str, default=None, help="e.g., 0,1,2,3")
     parser.add_argument("--checkpoint", type=str, default=None, help="single checkpoint path")
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        default="rapacl",
+        choices=["rapacl", "uni_mlp"],
+    )
     args = parser.parse_args()
 
     device = torch.device(train.DEVICE if torch.cuda.is_available() else "cpu")
@@ -664,11 +701,12 @@ def main():
             fold=fold,
             device=device,
             checkpoint_path=args.checkpoint,
+            model_type=args.model_type,
         )
         summary["fold"] = fold
         all_rows.append(summary)
 
-    exp_name = get_experiment_name()
+    exp_name = get_experiment_name(args.model_type)
     out_dir = os.path.join(train.OUTPUT_DIR, exp_name, "gene_analysis")
     os.makedirs(out_dir, exist_ok=True)
 
