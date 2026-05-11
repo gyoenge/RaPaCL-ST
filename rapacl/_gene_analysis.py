@@ -16,7 +16,7 @@ from scipy.stats import pearsonr
 import matplotlib.pyplot as plt
 
 from rapacl.engines.trainer_utils import set_seed
-from rapacl.engines.data_utils import build_dataset, build_loader
+from rapacl.engines.data_utils import build_dataset, build_loader, DEFAULT_DATASET_STRUCTURE
 from rapacl.model.rapacl import build_model
 from rapacl.model.rapacl_uni import build_uni_model
 from rapacl.configs.default.radiomics_columns import RADIOMICS_FEATURES_NAMES
@@ -25,6 +25,7 @@ import rapacl.configs.default.train as train
 
 
 TARGET_GENES = ["MKI67", "GATA3", "CEACAM6"]
+DEFAULT_DATASET_STRUCTURE = DEFAULT_DATASET_STRUCTURE.copy()
 
 
 def get_experiment_name() -> str:
