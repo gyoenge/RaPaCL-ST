@@ -13,6 +13,7 @@ warnings.filterwarnings(
     message="enable_nested_tensor is True",
 )
 
+import pandas as pd
 import torch
 import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -34,29 +35,51 @@ import rapacl.configs.default.train as train
 
 
 class RadiomicsTransTabEncoder(nn.Module):
-    def __init__(self, device: torch.device):
+    def __init__(
+        self,
+        device: torch.device,
+        feature_cols: list[str],
+    ):
         super().__init__()
 
-        self.encoder = build_radiomics_model(
-            device=device,
-        )
+        self.encoder = build_radiomics_model(device=device)
+        self.feature_cols = feature_cols
+        self.device = device
         self.out_dim = train.PROJECTION_DIM
 
+    def _tensor_to_dataframe(self, radiomics: torch.Tensor) -> pd.DataFrame:
+        radiomics_np = radiomics.detach().cpu().numpy()
+
+        return pd.DataFrame(
+            radiomics_np,
+            columns=self.feature_cols,
+        )
+
     def forward(self, radiomics: torch.Tensor) -> torch.Tensor:
-        out = self.encoder(radiomics)
+        radiomics_df = self._tensor_to_dataframe(radiomics)
+
+        out = self.encoder(radiomics_df)
 
         if isinstance(out, dict):
-            if "contrastive_feat" in out:
-                return out["contrastive_feat"]
-            if "cls_feat" in out:
-                return out["cls_feat"]
-            if "embedding" in out:
-                return out["embedding"]
+            for key in [
+                "contrastive_feat",
+                "cls_feat",
+                "embedding",
+                "z",
+                "feat",
+            ]:
+                if key in out:
+                    return out[key].to(self.device)
+
+            raise KeyError(
+                f"Cannot find feature key in encoder output. "
+                f"Available keys: {list(out.keys())}"
+            )
 
         if isinstance(out, tuple):
-            return out[0]
+            return out[0].to(self.device)
 
-        return out
+        return out.to(self.device)
 
 
 class RadiomicsTransTabMLPGeneModel(nn.Module):
@@ -64,10 +87,14 @@ class RadiomicsTransTabMLPGeneModel(nn.Module):
         self,
         num_genes: int,
         device: torch.device,
+        feature_cols: list[str],
     ):
         super().__init__()
 
-        self.radiomics_encoder = RadiomicsTransTabEncoder(device=device)
+        self.radiomics_encoder = RadiomicsTransTabEncoder(
+            device=device,
+            feature_cols=feature_cols,
+        )
 
         self.gene_head = MLPHead(
             in_dim=self.radiomics_encoder.out_dim,
@@ -85,10 +112,12 @@ class RadiomicsTransTabMLPGeneModel(nn.Module):
 def build_radtranstab_mlp_model(
     device: torch.device,
     num_genes: int,
+    feature_cols: list[str],
 ) -> RadiomicsTransTabMLPGeneModel:
     model = RadiomicsTransTabMLPGeneModel(
         num_genes=num_genes,
         device=device,
+        feature_cols=feature_cols,
     )
     return model.to(device)
 
@@ -277,16 +306,20 @@ def run_one_fold(
     )
 
     num_genes = len(train_dataset.genes)
+    feature_cols = train_dataset.feature_cols
 
     if is_main_process():
         print(f"[INFO][Fold {fold}] train samples: {len(train_dataset)}")
         print(f"[INFO][Fold {fold}] val samples: {len(val_dataset)}")
         print(f"[INFO][Fold {fold}] num_genes: {num_genes}")
-        print("[INFO] model: Radiomics TransTab + MLP gene head")
+        print(f"[INFO][Fold {fold}] radiomics features: {len(feature_cols)}")
+        print("[INFO] model: Radiomics TransTab pretrained representation + MLP")
+        print("[INFO] freeze: False")
 
     model = build_radtranstab_mlp_model(
         device=device,
         num_genes=num_genes,
+        feature_cols=feature_cols,
     )
 
     if distributed:
@@ -382,6 +415,7 @@ def run_one_fold(
                         "model_state_dict": state_dict,
                         "optimizer_state_dict": optimizer.state_dict(),
                         "best_record": best_record,
+                        "feature_cols": feature_cols,
                     },
                     ckpt_path,
                 )
@@ -461,59 +495,61 @@ def main():
 
     fold_results = []
 
-    for fold in train.SELECT_FOLDS:
-        best_record = run_one_fold(
-            fold=fold,
-            distributed=distributed,
-            rank=rank,
-            local_rank=local_rank,
-            device=device,
-        )
+    try:
+        for fold in train.SELECT_FOLDS:
+            best_record = run_one_fold(
+                fold=fold,
+                distributed=distributed,
+                rank=rank,
+                local_rank=local_rank,
+                device=device,
+            )
+
+            if is_main_process():
+                fold_results.append(
+                    {
+                        "fold": fold,
+                        **best_record,
+                    }
+                )
+
+            ddp_barrier()
+            torch.cuda.empty_cache()
 
         if is_main_process():
-            fold_results.append(
-                {
-                    "fold": fold,
-                    **best_record,
-                }
+            final_result = summarize_cv_results(fold_results)
+
+            result_dir = os.path.join(
+                train.OUTPUT_CHECKPOINT_DIR,
+                get_experiment_name(),
             )
+            os.makedirs(result_dir, exist_ok=True)
 
-        ddp_barrier()
-        torch.cuda.empty_cache()
+            result_path = os.path.join(result_dir, "cv_result.json")
+            with open(result_path, "w", encoding="utf-8") as f:
+                json.dump(final_result, f, indent=4)
 
-    if is_main_process():
-        final_result = summarize_cv_results(fold_results)
+            print("\n" + "=" * 80)
+            print("[FINAL CV RESULT]")
 
-        result_dir = os.path.join(
-            train.OUTPUT_CHECKPOINT_DIR,
-            get_experiment_name(),
-        )
-        os.makedirs(result_dir, exist_ok=True)
+            for r in final_result["fold_results"]:
+                print(
+                    f"Fold {r['fold']} | "
+                    f"best_epoch={r['epoch']} | "
+                    f"PCC={r['val_genewise_pcc']:.4f} | "
+                    f"MSE={r['val_gene_mse']:.6f}"
+                )
 
-        result_path = os.path.join(result_dir, "cv_result.json")
-        with open(result_path, "w", encoding="utf-8") as f:
-            json.dump(final_result, f, indent=4)
+            print("-" * 80)
+            print(f"Mean PCC: {final_result['mean_pcc']:.4f}")
+            print(f"Std PCC : {final_result['std_pcc']:.4f}")
+            print(f"Mean MSE: {final_result['mean_mse']:.6f}")
+            print(f"Std MSE : {final_result['std_mse']:.6f}")
+            print(f"Saved to: {result_path}")
+            print("=" * 80)
 
-        print("\n" + "=" * 80)
-        print("[FINAL CV RESULT]")
-
-        for r in final_result["fold_results"]:
-            print(
-                f"Fold {r['fold']} | "
-                f"best_epoch={r['epoch']} | "
-                f"PCC={r['val_genewise_pcc']:.4f} | "
-                f"MSE={r['val_gene_mse']:.6f}"
-            )
-
-        print("-" * 80)
-        print(f"Mean PCC: {final_result['mean_pcc']:.4f}")
-        print(f"Std PCC : {final_result['std_pcc']:.4f}")
-        print(f"Mean MSE: {final_result['mean_mse']:.6f}")
-        print(f"Std MSE : {final_result['std_mse']:.6f}")
-        print(f"Saved to: {result_path}")
-        print("=" * 80)
-
-    cleanup_ddp()
+    finally:
+        cleanup_ddp()
 
 
 if __name__ == "__main__":
