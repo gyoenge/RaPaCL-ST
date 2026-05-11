@@ -198,6 +198,44 @@ def compute_gene_pccs(preds: np.ndarray, targets: np.ndarray, genes: list[str]) 
 
     return df
 
+
+def find_h5_key(f, candidates):
+    """
+    h5 파일 안에서 candidates 중 존재하는 key를 찾음.
+    최상위뿐 아니라 group 내부도 탐색.
+    """
+    found = []
+
+    def visitor(name, obj):
+        if name.split("/")[-1] in candidates:
+            found.append(name)
+
+    f.visititems(visitor)
+
+    if len(found) == 0:
+        raise KeyError(
+            f"Cannot find any of {candidates}. "
+            f"Available keys: {list(f.keys())}"
+        )
+
+    return found[0]
+
+
+def read_h5_barcodes_and_coords(h5_path: str):
+    with h5py.File(h5_path, "r") as f:
+        barcode_key = find_h5_key(f, ["barcodes", "barcode"])
+        coord_key = find_h5_key(f, ["coords", "coord", "coordinates"])
+
+        print(f"[INFO] h5: {h5_path}")
+        print(f"[INFO] barcode key: {barcode_key}")
+        print(f"[INFO] coord key  : {coord_key}")
+
+        barcodes = f[barcode_key][:]
+        coords = f[coord_key][:]
+
+    return barcodes, coords
+
+
 def normalize_barcode_for_match(barcode) -> str:
     barcode = str(barcode)
 
@@ -234,10 +272,8 @@ def inject_coords_to_dataset(dataset):
     for sample_id, h5_path in sample_to_h5.items():
         barcode_to_coord = {}
 
-        with h5py.File(h5_path, "r") as f:
-            barcodes = f["barcodes"][:]
-            coords = f["coords"][:]
-
+        barcodes, coords = read_h5_barcodes_and_coords(h5_path)
+        
         for barcode, coord in zip(barcodes, coords):
             barcode = normalize_barcode_for_match(barcode)
             barcode_to_coord[barcode] = (int(coord[0]), int(coord[1]))
