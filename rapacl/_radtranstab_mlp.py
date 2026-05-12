@@ -30,8 +30,11 @@ from rapacl.engines.trainer_utils import (
     ddp_barrier,
 )
 from rapacl.engines.data_utils import build_dataset, build_loader
+from rapacl.engines.trainer_utils import freeze_module
 from rapacl.engines.metrics import compute_genewise_pcc
 import rapacl.configs.default.train as train
+
+FROZEN_RADTRANSTAB = True
 
 
 class RadiomicsTransTabEncoder(nn.Module):
@@ -46,6 +49,13 @@ class RadiomicsTransTabEncoder(nn.Module):
         self.feature_cols = feature_cols
         self.device = device
         self.out_dim = train.PROJECTION_DIM
+
+        # -----------------------------
+        # Freeze Option
+        # -----------------------------
+        if FROZEN_RADTRANSTAB:
+            freeze_module(self.encoder)
+            self.encoder.eval()
 
     def _tensor_to_dataframe(self, radiomics: torch.Tensor) -> pd.DataFrame:
         radiomics_np = radiomics.detach().cpu().numpy()
@@ -87,6 +97,13 @@ class RadiomicsTransTabEncoder(nn.Module):
 
         return select_token(out)
 
+    def train(self, mode: bool = True):
+        super().train(mode)
+
+        if FROZEN_RADTRANSTAB:
+            self.encoder.eval()
+
+        return self
 
 class RadiomicsTransTabMLPGeneModel(nn.Module):
     def __init__(
@@ -320,7 +337,7 @@ def run_one_fold(
         print(f"[INFO][Fold {fold}] num_genes: {num_genes}")
         print(f"[INFO][Fold {fold}] radiomics features: {len(feature_cols)}")
         print("[INFO] model: Radiomics TransTab pretrained representation + MLP")
-        print("[INFO] freeze: False")
+        print(f"[INFO] freeze: {FROZEN_RADTRANSTAB}")
 
     model = build_radtranstab_mlp_model(
         device=device,
