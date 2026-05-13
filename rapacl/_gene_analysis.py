@@ -30,7 +30,9 @@ from rapacl.configs.default.radiomics_columns import RADIOMICS_FEATURES_NAMES
 import rapacl.configs.default.train as train
 
 
-TARGET_GENES = ["MKI67", "GATA3", "CEACAM6"]
+TARGET_GENES = ["FASN", "CEACAM6", "GATA3", "SERPINA3", "TACSTD2", "ABCC11",] 
+# TARGET_GENES = ["FASN", "FOXA1", "CEACAM6", "GATA3", "MZB1", "AGR3", "SERPINA3", "TACSTD2", "ABCC11", "MKI67"] 
+# TARGET_GENES = ["MKI67", "GATA3", "CEACAM6"]
 DEFAULT_DATASET_STRUCTURE = DEFAULT_DATASET_STRUCTURE.copy()
 PLOT_SPOT_SIZE = 3 # 0.5 (TENX99 fit) # 3 (others) 
 
@@ -409,7 +411,8 @@ def save_target_gene_pcc_barplot(
     # 전체 gene 평균 PCC baseline
     baseline_pcc = pcc_df["pcc"].mean()
 
-    plt.figure(figsize=(6, 5))
+    # plt.figure(figsize=(6, 5))
+    plt.figure(figsize=(10, 5))
     bars = plt.bar(plot_df["gene"], plot_df["pcc"])
 
     for bar, (_, row) in zip(bars, plot_df.iterrows()):
