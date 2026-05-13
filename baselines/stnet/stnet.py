@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from src.baselines.stnet.densenet import build_densenet121_backbone
+from baselines.stnet.densenet import build_densenet121_backbone
 
 
 class STNet(nn.Module):

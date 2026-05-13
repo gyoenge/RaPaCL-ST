@@ -3,8 +3,8 @@ default_outer_fold: 0
 
 paths:
   bench_data_root: /root/workspace/datasets/hest_data/eval/bench_data/IDC
-  log_dir: logs/stnet
-  output_root: outputs/stnet
+  log_dir: ./outputs/stnet/logs
+  output_root: ./outputs/stnet
 
   # 선택: 직접 split 파일을 지정하고 싶을 때만 사용
   # train_split_csv: /root/workspace/hest_data/eval/bench_data/IDC/splits/train_0.csv
@@ -15,7 +15,7 @@ paths:
 
 model:
   backbone: densenet121
-  num_genes: 250
+  num_genes: 50 #250
   genes_criteria: var
   pretrained: true
 
@@ -37,4 +37,4 @@ runtime:
   device: cuda
 
   # eval 모드에서 특정 checkpoint를 읽고 싶으면 지정
-  checkpoint_path: outputs/stnet/run_20260405_172500/checkpoints/final_model.pth
+  checkpoint_path: outputs/stnet/run_20260513_192509/checkpoints/final_model.pth

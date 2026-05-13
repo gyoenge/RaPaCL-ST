@@ -17,4 +17,5 @@ __all__ = [
     "eval_fold",
     "select_best_epoch",
     "retrain_full_train",
+    "_stnet_gene_analysis",
 ]
